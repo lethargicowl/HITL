@@ -4,6 +4,7 @@ from typing import List, Optional
 from huggingface_hub import HfApi
 import statistics
 import uuid
+from extract import extract_data
 
 # Initialize the FastAPI app and Hugging Face API client
 app = FastAPI(title="HF Dataset Rating API Demo")
@@ -61,7 +62,8 @@ def get_client(client_id: str):
 def register_dataset(dataset: Dataset):
     dataset.id = dataset.id or str(uuid.uuid4())
     datasets[dataset.id] = dataset
-    return {"message": "Dataset registered", "dataset": dataset}
+    data = extract_data(dataset.hf_repo, "default", "train")
+    return {"message": "Dataset registered", "dataset": dataset, "data": data}
 
 @app.get("/datasets")
 def list_datasets():
