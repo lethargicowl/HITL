@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HITL Rating Platform</title>
+    <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>HITL Rating Platform</h1>
+            <p class="subtitle">Upload Excel or CSV files and rate each row</p>
+        </header>
+
+        <main>
+            <section class="upload-section">
+                <div class="upload-box" id="uploadBox">
+                    <div class="upload-icon">📄</div>
+                    <p>Drag and drop Excel or CSV file here</p>
+                    <p class="upload-hint">or</p>
+                    <label class="file-input-label">
+                        Browse Files
+                        <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" hidden>
+                    </label>
+                </div>
+
+                <div class="upload-form" id="uploadForm" style="display: none;">
+                    <div class="file-preview">
+                        <span class="file-icon">📊</span>
+                        <span class="file-name" id="fileName"></span>
+                        <button class="btn-remove" id="removeFile">✕</button>
+                    </div>
+                    <div class="form-group">
+                        <label for="sessionName">Session Name (optional)</label>
+                        <input type="text" id="sessionName" placeholder="Enter a name for this rating session">
+                    </div>
+                    <button class="btn-primary" id="uploadBtn">Upload and Start Rating</button>
+                </div>
+
+                <div class="upload-progress" id="uploadProgress" style="display: none;">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progressFill"></div>
+                    </div>
+                    <p id="progressText">Uploading...</p>
+                </div>
+
+                <div class="upload-error" id="uploadError" style="display: none;">
+                    <p id="errorText"></p>
+                    <button class="btn-secondary" id="tryAgain">Try Again</button>
+                </div>
+            </section>
+
+            <section class="sessions-section">
+                <h2>Recent Sessions</h2>
+                <div class="sessions-list" id="sessionsList">
+                    <p class="loading">Loading sessions...</p>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+    <script>
+        // Initialize home page
+        document.addEventListener('DOMContentLoaded', () => {
+            initUpload();
+            loadSessions();
+        });
+    </script>
+</body>
+</html>
