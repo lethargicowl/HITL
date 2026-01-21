@@ -1,0 +1,365 @@
+{% extends "base.html" %}
+
+{% block title %}Project - HITL Platform{% endblock %}
+
+{% block content %}
+<div class="project-header">
+    <a href="/dashboard" class="back-link">← Back to Projects</a>
+    <div class="project-title-row">
+        <h1 id="projectName">Loading...</h1>
+        <button class="btn-danger" onclick="deleteProject()">Delete Project</button>
+    </div>
+    <p class="project-description" id="projectDescription"></p>
+</div>
+
+<div class="project-sections">
+    <!-- Datasets Section -->
+    <section class="section-card">
+        <div class="section-header">
+            <h2>Datasets</h2>
+            <button class="btn-primary" onclick="showUploadModal()">+ Upload Dataset</button>
+        </div>
+        <div class="sessions-list" id="sessionsList">
+            <p class="loading">Loading datasets...</p>
+        </div>
+    </section>
+
+    <!-- Raters Section -->
+    <section class="section-card">
+        <div class="section-header">
+            <h2>Assigned Raters</h2>
+            <button class="btn-secondary" onclick="showAssignModal()">+ Assign Raters</button>
+        </div>
+        <div class="raters-list" id="ratersList">
+            <p class="loading">Loading raters...</p>
+        </div>
+    </section>
+</div>
+
+<!-- Upload Modal -->
+<div class="modal" id="uploadModal" style="display: none;">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>Upload Dataset</h2>
+            <button class="modal-close" onclick="hideUploadModal()">&times;</button>
+        </div>
+        <form id="uploadForm">
+            <div class="upload-box" id="uploadBox">
+                <p>Drag and drop Excel or CSV file here</p>
+                <p class="upload-hint">or</p>
+                <label class="file-input-label">
+                    Browse Files
+                    <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" hidden>
+                </label>
+            </div>
+            <div class="file-preview" id="filePreview" style="display: none;">
+                <span id="fileName"></span>
+                <button type="button" class="btn-remove" onclick="removeFile()">&times;</button>
+            </div>
+            <div class="form-group">
+                <label for="sessionName">Dataset Name (optional)</label>
+                <input type="text" id="sessionName">
+            </div>
+            <div class="form-error" id="uploadError" style="display: none;"></div>
+            <div class="modal-actions">
+                <button type="button" class="btn-secondary" onclick="hideUploadModal()">Cancel</button>
+                <button type="submit" class="btn-primary" id="uploadBtn" disabled>Upload</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Assign Raters Modal -->
+<div class="modal" id="assignModal" style="display: none;">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>Assign Raters</h2>
+            <button class="modal-close" onclick="hideAssignModal()">&times;</button>
+        </div>
+        <div class="raters-select" id="ratersSelect">
+            <p class="loading">Loading available raters...</p>
+        </div>
+        <div class="form-error" id="assignError" style="display: none;"></div>
+        <div class="modal-actions">
+            <button type="button" class="btn-secondary" onclick="hideAssignModal()">Cancel</button>
+            <button type="button" class="btn-primary" onclick="assignSelectedRaters()">Assign Selected</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const PROJECT_ID = "{{ project_id }}";
+let projectData = null;
+let selectedFile = null;
+
+document.addEventListener('DOMContentLoaded', () => {
+    loadProject();
+});
+
+async function loadProject() {
+    try {
+        const response = await fetch(`/api/projects/${PROJECT_ID}`);
+        if (response.status === 401) {
+            window.location.href = '/login';
+            return;
+        }
+        if (response.status === 404 || response.status === 403) {
+            window.location.href = '/dashboard';
+            return;
+        }
+        projectData = await response.json();
+
+        document.getElementById('projectName').textContent = projectData.name;
+        document.getElementById('projectDescription').textContent = projectData.description || '';
+
+        loadSessions();
+        loadRaters();
+
+    } catch (error) {
+        console.error('Failed to load project:', error);
+    }
+}
+
+async function loadSessions() {
+    const list = document.getElementById('sessionsList');
+
+    try {
+        const response = await fetch(`/api/projects/${PROJECT_ID}/sessions`);
+        const sessions = await response.json();
+
+        if (sessions.length === 0) {
+            list.innerHTML = '<p class="empty-hint">No datasets yet. Upload one to get started.</p>';
+            return;
+        }
+
+        list.innerHTML = sessions.map(session => {
+            const progress = session.row_count > 0
+                ? Math.round((session.rated_count / session.row_count) * 100)
+                : 0;
+
+            return `
+                <div class="session-item">
+                    <div class="session-info">
+                        <h4>${escapeHtml(session.name)}</h4>
+                        <span class="session-meta">${session.filename}</span>
+                    </div>
+                    <div class="session-progress">
+                        <span>${session.rated_count}/${session.row_count} rated (${progress}%)</span>
+                        <div class="progress-bar small">
+                            <div class="progress-fill" style="width: ${progress}%"></div>
+                        </div>
+                    </div>
+                    <div class="session-actions">
+                        <a href="/rate/${session.id}" class="btn-secondary btn-small">View/Rate</a>
+                        <a href="/api/sessions/${session.id}/export?format=xlsx" class="btn-secondary btn-small">Export</a>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+    } catch (error) {
+        list.innerHTML = '<p class="error">Failed to load datasets</p>';
+    }
+}
+
+function loadRaters() {
+    const list = document.getElementById('ratersList');
+
+    if (!projectData.assigned_raters || projectData.assigned_raters.length === 0) {
+        list.innerHTML = '<p class="empty-hint">No raters assigned yet.</p>';
+        return;
+    }
+
+    list.innerHTML = projectData.assigned_raters.map(rater => `
+        <div class="rater-item">
+            <span class="rater-name">${escapeHtml(rater.username)}</span>
+            <button class="btn-remove" onclick="removeRater('${rater.id}')">&times;</button>
+        </div>
+    `).join('');
+}
+
+// Upload Modal
+function showUploadModal() {
+    document.getElementById('uploadModal').style.display = 'flex';
+}
+
+function hideUploadModal() {
+    document.getElementById('uploadModal').style.display = 'none';
+    selectedFile = null;
+    document.getElementById('filePreview').style.display = 'none';
+    document.getElementById('uploadBox').style.display = 'block';
+    document.getElementById('uploadBtn').disabled = true;
+    document.getElementById('uploadError').style.display = 'none';
+    document.getElementById('sessionName').value = '';
+}
+
+document.getElementById('fileInput').addEventListener('change', (e) => {
+    if (e.target.files.length > 0) {
+        selectFile(e.target.files[0]);
+    }
+});
+
+function selectFile(file) {
+    if (!file.name.match(/\.(xlsx|xls|csv)$/i)) {
+        alert('Please select an Excel or CSV file');
+        return;
+    }
+    selectedFile = file;
+    document.getElementById('fileName').textContent = file.name;
+    document.getElementById('filePreview').style.display = 'flex';
+    document.getElementById('uploadBox').style.display = 'none';
+    document.getElementById('uploadBtn').disabled = false;
+    document.getElementById('sessionName').value = file.name.replace(/\.(xlsx|xls|csv)$/i, '');
+}
+
+function removeFile() {
+    selectedFile = null;
+    document.getElementById('filePreview').style.display = 'none';
+    document.getElementById('uploadBox').style.display = 'block';
+    document.getElementById('uploadBtn').disabled = true;
+    document.getElementById('fileInput').value = '';
+}
+
+document.getElementById('uploadForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!selectedFile) return;
+
+    const errorEl = document.getElementById('uploadError');
+    errorEl.style.display = 'none';
+
+    const formData = new FormData();
+    formData.append('file', selectedFile);
+    formData.append('session_name', document.getElementById('sessionName').value || selectedFile.name);
+
+    try {
+        const response = await fetch(`/api/projects/${PROJECT_ID}/upload`, {
+            method: 'POST',
+            body: formData
+        });
+
+        if (!response.ok) {
+            const data = await response.json();
+            throw new Error(data.detail || 'Upload failed');
+        }
+
+        hideUploadModal();
+        loadSessions();
+
+    } catch (error) {
+        errorEl.textContent = error.message;
+        errorEl.style.display = 'block';
+    }
+});
+
+// Assign Modal
+async function showAssignModal() {
+    document.getElementById('assignModal').style.display = 'flex';
+    const select = document.getElementById('ratersSelect');
+
+    try {
+        const response = await fetch('/api/users/raters');
+        const raters = await response.json();
+
+        const assignedIds = projectData.assigned_raters.map(r => r.id);
+
+        if (raters.length === 0) {
+            select.innerHTML = '<p>No raters available</p>';
+            return;
+        }
+
+        select.innerHTML = raters.map(rater => {
+            const isAssigned = assignedIds.includes(rater.id);
+            return `
+                <label class="rater-checkbox ${isAssigned ? 'assigned' : ''}">
+                    <input type="checkbox" value="${rater.id}" ${isAssigned ? 'checked disabled' : ''}>
+                    ${escapeHtml(rater.username)}
+                    ${isAssigned ? '<span class="assigned-badge">Already assigned</span>' : ''}
+                </label>
+            `;
+        }).join('');
+
+    } catch (error) {
+        select.innerHTML = '<p class="error">Failed to load raters</p>';
+    }
+}
+
+function hideAssignModal() {
+    document.getElementById('assignModal').style.display = 'none';
+    document.getElementById('assignError').style.display = 'none';
+}
+
+async function assignSelectedRaters() {
+    const checkboxes = document.querySelectorAll('#ratersSelect input[type="checkbox"]:checked:not(:disabled)');
+    const raterIds = Array.from(checkboxes).map(cb => cb.value);
+
+    if (raterIds.length === 0) {
+        return;
+    }
+
+    const errorEl = document.getElementById('assignError');
+    errorEl.style.display = 'none';
+
+    try {
+        const response = await fetch(`/api/projects/${PROJECT_ID}/assign`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ rater_ids: raterIds })
+        });
+
+        if (!response.ok) {
+            const data = await response.json();
+            throw new Error(data.detail || 'Assignment failed');
+        }
+
+        hideAssignModal();
+        loadProject();
+
+    } catch (error) {
+        errorEl.textContent = error.message;
+        errorEl.style.display = 'block';
+    }
+}
+
+async function removeRater(raterId) {
+    if (!confirm('Remove this rater from the project?')) return;
+
+    try {
+        await fetch(`/api/projects/${PROJECT_ID}/raters/${raterId}`, {
+            method: 'DELETE'
+        });
+        loadProject();
+    } catch (error) {
+        alert('Failed to remove rater');
+    }
+}
+
+async function deleteProject() {
+    if (!confirm('Are you sure you want to delete this project? This cannot be undone.')) return;
+
+    try {
+        const response = await fetch(`/api/projects/${PROJECT_ID}`, {
+            method: 'DELETE'
+        });
+
+        if (response.ok) {
+            window.location.href = '/dashboard';
+        } else {
+            alert('Failed to delete project');
+        }
+    } catch (error) {
+        alert('Failed to delete project');
+    }
+}
+
+// Close modals on outside click
+document.querySelectorAll('.modal').forEach(modal => {
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+            modal.style.display = 'none';
+        }
+    });
+});
+</script>
+{% endblock %}

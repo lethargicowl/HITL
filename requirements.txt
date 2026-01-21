@@ -6,3 +6,4 @@ pandas
 sqlalchemy
 jinja2
 aiofiles
+passlib[bcrypt]

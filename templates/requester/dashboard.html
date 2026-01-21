@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - HITL Platform{% endblock %}
+
+{% block content %}
+<header class="dashboard-header">
+    <h1>My Projects</h1>
+    <button class="btn-primary" onclick="showCreateProjectModal()">+ New Project</button>
+</header>
+
+<div class="projects-grid" id="projectsGrid">
+    <p class="loading">Loading projects...</p>
+</div>
+
+<!-- Create Project Modal -->
+<div class="modal" id="createProjectModal" style="display: none;">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>Create New Project</h2>
+            <button class="modal-close" onclick="hideCreateProjectModal()">&times;</button>
+        </div>
+        <form id="createProjectForm">
+            <div class="form-group">
+                <label for="projectName">Project Name</label>
+                <input type="text" id="projectName" required>
+            </div>
+            <div class="form-group">
+                <label for="projectDescription">Description (optional)</label>
+                <textarea id="projectDescription" rows="3"></textarea>
+            </div>
+            <div class="form-error" id="createError" style="display: none;"></div>
+            <div class="modal-actions">
+                <button type="button" class="btn-secondary" onclick="hideCreateProjectModal()">Cancel</button>
+                <button type="submit" class="btn-primary">Create Project</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    loadProjects();
+});
+
+async function loadProjects() {
+    const grid = document.getElementById('projectsGrid');
+
+    try {
+        const response = await fetch('/api/projects');
+        if (response.status === 401) {
+            window.location.href = '/login';
+            return;
+        }
+        const projects = await response.json();
+
+        if (projects.length === 0) {
+            grid.innerHTML = `
+                <div class="empty-state">
+                    <p>No projects yet.</p>
+                    <p>Create your first project to get started!</p>
+                </div>
+            `;
+            return;
+        }
+
+        grid.innerHTML = projects.map(project => {
+            const progress = project.total_rows > 0
+                ? Math.round((project.rated_rows / project.total_rows) * 100)
+                : 0;
+            const date = new Date(project.created_at).toLocaleDateString();
+
+            return `
+                <div class="project-card" onclick="window.location.href='/projects/${project.id}'">
+                    <h3>${escapeHtml(project.name)}</h3>
+                    <p class="project-desc">${escapeHtml(project.description || 'No description')}</p>
+                    <div class="project-stats">
+                        <span>${project.session_count} dataset(s)</span>
+                        <span>${project.rated_rows}/${project.total_rows} rated</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" style="width: ${progress}%"></div>
+                    </div>
+                    <p class="project-date">Created ${date}</p>
+                </div>
+            `;
+        }).join('');
+
+    } catch (error) {
+        grid.innerHTML = '<p class="error">Failed to load projects</p>';
+    }
+}
+
+function showCreateProjectModal() {
+    document.getElementById('createProjectModal').style.display = 'flex';
+    document.getElementById('projectName').focus();
+}
+
+function hideCreateProjectModal() {
+    document.getElementById('createProjectModal').style.display = 'none';
+    document.getElementById('createProjectForm').reset();
+    document.getElementById('createError').style.display = 'none';
+}
+
+document.getElementById('createProjectForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const errorEl = document.getElementById('createError');
+    errorEl.style.display = 'none';
+
+    const name = document.getElementById('projectName').value;
+    const description = document.getElementById('projectDescription').value || null;
+
+    try {
+        const response = await fetch('/api/projects', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, description })
+        });
+
+        if (!response.ok) {
+            const data = await response.json();
+            throw new Error(data.detail || 'Failed to create project');
+        }
+
+        const project = await response.json();
+        window.location.href = `/projects/${project.id}`;
+
+    } catch (error) {
+        errorEl.textContent = error.message;
+        errorEl.style.display = 'block';
+    }
+});
+
+// Close modal on outside click
+document.getElementById('createProjectModal').addEventListener('click', (e) => {
+    if (e.target.id === 'createProjectModal') {
+        hideCreateProjectModal();
+    }
+});
+</script>
+{% endblock %}
