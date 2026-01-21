@@ -1,160 +1,377 @@
-# HITL Platform - Current Implementation State
+# HITL Platform - Implementation State
 
-## Overview
-A Human-in-the-Loop (HITL) platform for uploading datasets and collecting human ratings. Built with FastAPI backend and vanilla JavaScript frontend.
+## Current State: Phase 1 Complete ✅
 
-## Tech Stack
-- **Backend**: FastAPI (Python 3.9+)
-- **Database**: SQLite with SQLAlchemy ORM
-- **Frontend**: Jinja2 templates, vanilla JavaScript, CSS
-- **Auth**: Session-based with bcrypt password hashing
+### What's Built
+- User authentication (register, login, logout, sessions)
+- Two roles: Requester and Rater
+- Project CRUD with rater assignment
+- Dataset upload (CSV, Excel)
+- 1-5 star rating with comments
+- Multiple ratings per row (one per rater)
+- Export to Excel/CSV with all ratings
 
-## Implemented Features
+### Tech Stack
+- Backend: FastAPI + SQLAlchemy + SQLite
+- Frontend: Jinja2 templates + vanilla JS
+- Auth: Session cookies + bcrypt
 
-### Authentication System
-- User registration with role selection (Requester or Rater)
-- Session-based login with secure cookies (7-day expiry)
-- Role-based access control (RBAC)
-- Logout functionality
-
-### User Roles
-1. **Requester**: Creates projects, uploads datasets, assigns raters, views all ratings, exports results
-2. **Rater**: Views assigned projects, rates data rows, sees other raters' ratings
-
-### Project Management
-- Create/delete projects with name and description
-- Assign multiple raters to projects
-- Remove raters from projects
-- View project statistics (session count, total rows, rated rows)
-
-### Dataset Management
-- Upload Excel (.xlsx, .xls) or CSV files
-- Automatic column detection
-- Session naming (defaults to filename)
-- Delete sessions
-
-### Rating System
-- **Multiple ratings per row**: Each rater can give their own rating (1-5 stars)
-- Comments support for each rating
-- View all ratings from other raters on each row
-- Filter rows by: All, Rated (by you), Unrated (by you)
-- Keyboard shortcuts: 1-5 for rating, arrows for navigation, Enter to save
-
-### Export
-- Export to Excel (.xlsx) or CSV
-- Includes original data columns
-- Separate rating/comment columns for each rater
-- Average rating and rating count per row
-
-## File Structure
+### Current File Structure
 ```
 HITL/
 ├── app/
 │   ├── __init__.py
-│   ├── database.py          # SQLite setup, session management
-│   ├── dependencies.py      # Auth dependencies (get_current_user, etc.)
-│   ├── main.py              # FastAPI app, page routes
-│   ├── models.py            # SQLAlchemy models + Pydantic schemas
+│   ├── database.py
+│   ├── dependencies.py
+│   ├── main.py
+│   ├── models.py
 │   ├── routers/
-│   │   ├── auth.py          # Register, login, logout, me
-│   │   ├── exports.py       # Export session data
-│   │   ├── projects.py      # Project CRUD, rater assignment
-│   │   ├── ratings.py       # Get rows, create/update ratings
-│   │   ├── uploads.py       # File upload, session management
-│   │   └── users.py         # List raters
+│   │   ├── auth.py
+│   │   ├── exports.py
+│   │   ├── projects.py
+│   │   ├── ratings.py
+│   │   ├── uploads.py
+│   │   └── users.py
 │   └── services/
-│       ├── auth_service.py  # Password hashing, session tokens
-│       └── excel_parser.py  # Parse Excel/CSV files
-├── data/
-│   └── hitl.db              # SQLite database
-├── static/
-│   ├── css/styles.css       # All styles
-│   └── js/app.js            # Shared JS functions
+│       ├── auth_service.py
+│       └── excel_parser.py
+├── static/{css,js}/
 ├── templates/
-│   ├── auth/
-│   │   ├── login.html
-│   │   └── register.html
-│   ├── rater/
-│   │   ├── dashboard.html
-│   │   └── project_sessions.html
-│   ├── requester/
-│   │   ├── dashboard.html
-│   │   └── project_detail.html
-│   ├── base.html            # Base template with nav
-│   └── rating.html          # Rating interface
-├── requirements.txt
-├── PRD.md
-└── LAST_STATE.md
+└── data/hitl.db
 ```
 
-## Database Schema
+---
 
-### Users
-- id, username, password_hash, role, created_at
+## Phase 2: Implementation Tasks
 
-### UserSession
-- id (token), user_id, created_at, expires_at
+### Task 2.1: Evaluation Schema System ⭐ START HERE
 
-### Project
-- id, name, description, owner_id, created_at
+**Goal**: Replace fixed 1-5 stars with configurable evaluation types.
 
-### ProjectAssignment
-- id, project_id, rater_id, assigned_at
-- Unique constraint: (project_id, rater_id)
+#### Models to Add (`models.py`)
+```python
+class EvaluationType(str, Enum):
+    RATING = "rating"
+    BINARY = "binary"
+    MULTI_LABEL = "multi_label"
+    PAIRWISE = "pairwise"
+    MULTI_CRITERIA = "multi_criteria"
 
-### Session (Dataset)
-- id, name, filename, columns (JSON), project_id, created_at
+class EvaluationSchema(Base):
+    __tablename__ = "evaluation_schemas"
+    id = Column(String, primary_key=True)
+    name = Column(String, nullable=False)
+    type = Column(String, nullable=False)  # EvaluationType
+    config = Column(Text, nullable=False)  # JSON config
+    created_at = Column(DateTime, default=datetime.utcnow)
+```
 
-### DataRow
-- id, session_id, row_index, content (JSON)
+#### Project Model Changes
+```python
+class Project(Base):
+    # Add these fields:
+    evaluation_type = Column(String, default="rating")
+    evaluation_config = Column(Text, nullable=True)  # JSON
+    instructions = Column(Text, nullable=True)
+```
 
-### Rating
-- id, data_row_id, session_id, rater_id, rating_value, comment, rated_at
-- Unique constraint: (data_row_id, rater_id) - one rating per rater per row
+#### Evaluation Model Changes (rename Rating → Evaluation)
+```python
+class Evaluation(Base):  # Was: Rating
+    __tablename__ = "evaluations"
+    # Change rating_value to flexible response:
+    response = Column(Text, nullable=False)  # JSON
+    time_spent_ms = Column(Integer, nullable=True)
+```
 
-## API Endpoints
+#### Config Examples
+```python
+# Rating (1-10 scale)
+{"type": "rating", "min": 1, "max": 10, "labels": {"1": "Terrible", "10": "Perfect"}}
 
-### Auth
-- `POST /api/auth/register` - Register new user
-- `POST /api/auth/login` - Login, get session cookie
-- `POST /api/auth/logout` - Logout, clear session
-- `GET /api/auth/me` - Get current user
+# Binary
+{"type": "binary", "options": [
+    {"value": "yes", "label": "Yes"},
+    {"value": "no", "label": "No"}
+]}
 
-### Projects
-- `GET /api/projects` - List projects (role-filtered)
-- `POST /api/projects` - Create project (requester only)
-- `GET /api/projects/{id}` - Get project details
-- `DELETE /api/projects/{id}` - Delete project
-- `POST /api/projects/{id}/assign` - Assign raters
-- `DELETE /api/projects/{id}/raters/{rater_id}` - Remove rater
-- `GET /api/projects/{id}/sessions` - List sessions
+# Multi-label
+{"type": "multi_label", "options": [
+    {"value": "accurate", "label": "Factually Accurate"},
+    {"value": "helpful", "label": "Helpful"},
+    {"value": "safe", "label": "Safe"}
+], "min_select": 0, "max_select": null}
 
-### Sessions & Ratings
-- `POST /api/projects/{id}/upload` - Upload dataset
-- `GET /api/sessions/{id}` - Get session details
-- `DELETE /api/sessions/{id}` - Delete session
-- `GET /api/sessions/{id}/rows` - Get paginated rows with ratings
-- `GET /api/sessions/{id}/export` - Export to Excel/CSV
-- `POST /api/ratings` - Create/update rating
+# Multi-criteria
+{"type": "multi_criteria", "criteria": [
+    {"key": "accuracy", "label": "Accuracy", "min": 1, "max": 5},
+    {"key": "helpfulness", "label": "Helpfulness", "min": 1, "max": 5}
+]}
+```
 
-### Users
-- `GET /api/users/raters` - List all raters (for assignment)
+#### Files to Create
+- `app/routers/schemas.py` - Schema CRUD endpoints
+- `templates/components/eval_*.html` - Evaluation type components
 
-## Running the Application
+#### Files to Modify
+- `app/models.py` - Add new models
+- `app/routers/projects.py` - Include schema in project creation
+- `app/routers/ratings.py` - Accept flexible response format
+- `templates/requester/project_detail.html` - Schema selector
+- `templates/rating.html` - Dynamic evaluation form
+- `static/js/app.js` - Render different eval types
+
+---
+
+### Task 2.2: Pairwise Comparison
+
+**Goal**: A vs B preference evaluation for RLHF.
+
+#### Model Changes
+```python
+class ComparisonPair(Base):
+    __tablename__ = "comparison_pairs"
+    id = Column(String, primary_key=True)
+    session_id = Column(String, ForeignKey("sessions.id"))
+    item_a_id = Column(String, ForeignKey("data_rows.id"))
+    item_b_id = Column(String, ForeignKey("data_rows.id"))
+    # Response stored in Evaluation table
+```
+
+#### Upload Format
+```csv
+prompt,response_a,response_b
+"What is 2+2?","The answer is 4","2+2=4"
+```
+
+#### UI Requirements
+- Side-by-side display
+- Buttons: "A is better", "B is better", "Tie"
+- Optional: "A is much better" / "B is much better"
+
+#### Response Format
+```json
+{"winner": "a", "confidence": "much_better"}
+```
+
+---
+
+### Task 2.3: Gold Questions
+
+**Goal**: Validate rater quality with known-answer items.
+
+#### Model Changes
+```python
+class DataRow(Base):
+    # Add:
+    is_gold = Column(Boolean, default=False)
+    gold_answer = Column(Text, nullable=True)  # Expected response JSON
+
+class RaterPerformance(Base):
+    __tablename__ = "rater_performance"
+    id = Column(String, primary_key=True)
+    rater_id = Column(String, ForeignKey("users.id"))
+    session_id = Column(String, ForeignKey("sessions.id"))
+    gold_correct = Column(Integer, default=0)
+    gold_total = Column(Integer, default=0)
+    updated_at = Column(DateTime)
+```
+
+#### Implementation
+1. Upload gold items separately or mark in CSV
+2. Mix gold items into queue (configurable %)
+3. Auto-score when rater submits
+4. Track accuracy per rater per session
+
+---
+
+### Task 2.4: Inter-Rater Agreement Metrics
+
+**Goal**: Calculate agreement scores.
+
+#### New Service (`services/metrics.py`)
+```python
+def percent_agreement(evaluations: List[Evaluation]) -> float:
+    """Simple % of matching responses."""
+
+def cohens_kappa(rater_a: List, rater_b: List) -> float:
+    """Cohen's Kappa for 2 raters."""
+
+def fleiss_kappa(matrix: List[List]) -> float:
+    """Fleiss' Kappa for N raters."""
+
+def krippendorffs_alpha(matrix: List[List]) -> float:
+    """Krippendorff's Alpha - works with missing data."""
+```
+
+#### API Endpoint
+```
+GET /api/sessions/{id}/metrics
+Response: {
+    "agreement_percent": 0.85,
+    "cohens_kappa": 0.72,
+    "fleiss_kappa": 0.68,
+    "items_with_disagreement": 15
+}
+```
+
+---
+
+### Task 2.5: Real-Time Dashboard
+
+**Goal**: Progress and quality monitoring.
+
+#### New Endpoint
+```
+GET /api/projects/{id}/dashboard
+Response: {
+    "progress": {
+        "total_items": 500,
+        "completed": 350,
+        "percent": 70
+    },
+    "quality": {
+        "agreement_score": 0.82,
+        "gold_accuracy": 0.91
+    },
+    "raters": [
+        {"id": "...", "username": "alice", "completed": 120, "accuracy": 0.95},
+        {"id": "...", "username": "bob", "completed": 80, "accuracy": 0.88}
+    ],
+    "distribution": {
+        "1": 10, "2": 25, "3": 100, "4": 150, "5": 65
+    }
+}
+```
+
+#### New Template
+`templates/requester/project_dashboard.html`
+
+---
+
+### Task 2.6: Instructions Editor
+
+**Goal**: Rich guidelines for raters.
+
+#### Model Changes
+```python
+class Project(Base):
+    instructions = Column(Text)  # Markdown
+    examples = Column(Text)  # JSON array
+```
+
+#### Example Format
+```json
+[
+    {
+        "input": "What is the capital of France?",
+        "good_response": "Paris",
+        "bad_response": "London",
+        "explanation": "Paris is the correct capital..."
+    }
+]
+```
+
+#### UI
+- Markdown editor in project settings
+- Example builder (input + good/bad responses)
+- Preview panel
+- Shown in rating interface (collapsible)
+
+---
+
+### Task 2.7: Organizations
+
+**Goal**: Team management.
+
+#### New Models
+```python
+class Organization(Base):
+    __tablename__ = "organizations"
+    id = Column(String, primary_key=True)
+    name = Column(String, nullable=False)
+    created_at = Column(DateTime)
+
+class OrganizationMember(Base):
+    __tablename__ = "organization_members"
+    id = Column(String, primary_key=True)
+    org_id = Column(String, ForeignKey("organizations.id"))
+    user_id = Column(String, ForeignKey("users.id"))
+    role = Column(String)  # "admin", "member"
+```
+
+#### User Model Changes
+```python
+class User(Base):
+    org_id = Column(String, ForeignKey("organizations.id"), nullable=True)
+```
+
+#### Project Model Changes
+```python
+class Project(Base):
+    org_id = Column(String, ForeignKey("organizations.id"), nullable=True)
+    # owner_id still exists for personal projects
+```
+
+---
+
+### Task 2.8: Invitation System
+
+**Goal**: Invite raters via link.
+
+#### New Model
+```python
+class Invitation(Base):
+    __tablename__ = "invitations"
+    id = Column(String, primary_key=True)
+    token = Column(String, unique=True)
+    email = Column(String, nullable=True)
+    org_id = Column(String, ForeignKey("organizations.id"), nullable=True)
+    project_id = Column(String, ForeignKey("projects.id"), nullable=True)
+    role = Column(String)  # "rater"
+    expires_at = Column(DateTime)
+    used_at = Column(DateTime, nullable=True)
+```
+
+#### Flow
+1. `POST /api/invitations` - Create invite, get link
+2. Rater visits `/invite/{token}`
+3. If not logged in → register page
+4. Auto-assign to org/project on completion
+
+---
+
+## Implementation Order
+
+| # | Task | Complexity | Dependencies |
+|---|------|------------|--------------|
+| 1 | Evaluation Schema System | High | None |
+| 2 | Multi-Criteria Evaluation | Medium | Task 1 |
+| 3 | Binary Classification | Low | Task 1 |
+| 4 | Multi-Label Classification | Low | Task 1 |
+| 5 | Pairwise Comparison | High | Task 1 |
+| 6 | Gold Questions | Medium | None |
+| 7 | Agreement Metrics | Medium | Task 6 |
+| 8 | Dashboard | Medium | Task 7 |
+| 9 | Instructions Editor | Low | None |
+| 10 | Organizations | Medium | None |
+| 11 | Invitations | Medium | Task 10 |
+
+---
+
+## Quick Reference
+
+### Running the App
 ```bash
-# Install dependencies
 pip install -r requirements.txt
-
-# Start server
 python3 -m uvicorn app.main:app --reload --port 8000
-
-# Access at http://localhost:8000
 ```
 
-## Known Issues / Future Work
-- No password reset functionality
-- No email verification
-- No pagination on dashboard project lists
-- No bulk rating operations
-- No inter-rater agreement metrics
-- No admin panel
+### Current DB Location
+`data/hitl.db`
+
+### Delete DB to Reset
+```bash
+rm data/hitl.db
+# Restart server - new DB auto-created
+```
