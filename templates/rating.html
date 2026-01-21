@@ -1,100 +1,101 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Rate Session - HITL Platform</title>
-    <link rel="stylesheet" href="/static/css/styles.css">
-</head>
-<body>
-    <div class="container">
-        <header class="rating-header">
-            <div class="header-left">
-                <a href="/" class="back-link">← Back</a>
-                <h1 id="sessionName">Loading...</h1>
-            </div>
-            <div class="header-right">
-                <select id="exportFormat" class="export-select">
-                    <option value="xlsx">Excel (.xlsx)</option>
-                    <option value="csv">CSV (.csv)</option>
-                </select>
-                <button class="btn-secondary" id="exportBtn">Export Results</button>
-            </div>
-        </header>
+{% extends "base.html" %}
 
-        <div class="progress-section">
-            <div class="progress-info">
-                <span id="progressText">0 / 0 rated</span>
-                <span id="progressPercent">0%</span>
-            </div>
-            <div class="progress-bar">
-                <div class="progress-fill" id="progressFill" style="width: 0%"></div>
-            </div>
+{% block title %}Rate Session - HITL Platform{% endblock %}
+
+{% block content %}
+<div class="container rating-container">
+    <header class="rating-header">
+        <div class="header-left">
+            <a href="/dashboard" id="backLink" class="back-link">← Back to Project</a>
+            <h1><a id="projectName" href="/dashboard">Project</a> / <span id="sessionName">Loading...</span></h1>
         </div>
-
-        <div class="filter-section">
-            <div class="filter-buttons">
-                <button class="filter-btn active" data-filter="all">All</button>
-                <button class="filter-btn" data-filter="unrated">Unrated</button>
-                <button class="filter-btn" data-filter="rated">Rated</button>
-            </div>
-            <div class="navigation">
-                <button class="nav-btn" id="prevBtn" disabled>← Previous</button>
-                <span id="pageInfo">Row 1 of 1</span>
-                <button class="nav-btn" id="nextBtn" disabled>Next →</button>
-            </div>
+        <div class="header-right">
+            <select id="exportFormat" class="export-select">
+                <option value="xlsx">Excel (.xlsx)</option>
+                <option value="csv">CSV (.csv)</option>
+            </select>
+            <button class="btn-secondary" id="exportBtn">Export Results</button>
         </div>
+    </header>
 
-        <main class="rating-main">
-            <div class="row-card" id="rowCard">
-                <div class="row-header">
-                    <span class="row-number" id="rowNumber">Row #1</span>
-                    <span class="rating-status" id="ratingStatus"></span>
-                </div>
-                <div class="row-content" id="rowContent">
-                    <p class="loading">Loading data...</p>
-                </div>
-            </div>
-
-            <div class="rating-section">
-                <h3>Your Rating</h3>
-                <div class="star-rating" id="starRating">
-                    <button class="star" data-value="1">★</button>
-                    <button class="star" data-value="2">★</button>
-                    <button class="star" data-value="3">★</button>
-                    <button class="star" data-value="4">★</button>
-                    <button class="star" data-value="5">★</button>
-                </div>
-                <div class="rating-labels">
-                    <span>Poor</span>
-                    <span>Excellent</span>
-                </div>
-
-                <div class="comment-section">
-                    <label for="comment">Comment (optional)</label>
-                    <textarea id="comment" placeholder="Add any notes about this item..."></textarea>
-                </div>
-
-                <div class="action-buttons">
-                    <button class="btn-secondary" id="skipBtn">Skip</button>
-                    <button class="btn-primary" id="saveBtn" disabled>Save Rating</button>
-                    <button class="btn-primary" id="saveNextBtn" disabled>Save & Next</button>
-                </div>
-            </div>
-        </main>
-
-        <div class="keyboard-hints">
-            <span>Keyboard: 1-5 to rate • ← → to navigate • Enter to save & next</span>
+    <div class="progress-section">
+        <div class="progress-info">
+            <span id="progressText">0 / 0 rated</span>
+            <span id="progressPercent">0%</span>
+        </div>
+        <div class="progress-bar">
+            <div class="progress-fill" id="progressFill" style="width: 0%"></div>
         </div>
     </div>
 
-    <script src="/static/js/app.js"></script>
-    <script>
-        // Initialize rating page
-        const SESSION_ID = "{{ session_id }}";
-        document.addEventListener('DOMContentLoaded', () => {
-            initRating(SESSION_ID);
-        });
-    </script>
-</body>
-</html>
+    <div class="filter-section">
+        <div class="filter-buttons">
+            <button class="filter-btn active" data-filter="all">All</button>
+            <button class="filter-btn" data-filter="unrated">Unrated</button>
+            <button class="filter-btn" data-filter="rated">Rated</button>
+        </div>
+        <div class="navigation">
+            <button class="nav-btn" id="prevBtn" disabled>← Previous</button>
+            <span id="pageInfo">Row 1 of 1</span>
+            <button class="nav-btn" id="nextBtn" disabled>Next →</button>
+        </div>
+    </div>
+
+    <main class="rating-main">
+        <div class="row-card" id="rowCard">
+            <div class="row-header">
+                <span class="row-number" id="rowNumber">Row #1</span>
+                <span class="rating-status" id="ratingStatus"></span>
+            </div>
+            <div class="row-content" id="rowContent">
+                <p class="loading">Loading data...</p>
+            </div>
+        </div>
+
+        <!-- Other Ratings Section -->
+        <div class="other-ratings-section">
+            <h3>Other Raters</h3>
+            <div id="otherRatings">
+                <p class="no-other-ratings">No other ratings yet</p>
+            </div>
+        </div>
+
+        <div class="rating-section" id="ratingControls">
+            <h3>Your Rating</h3>
+            <div class="star-rating" id="starRating">
+                <button class="star" data-value="1">★</button>
+                <button class="star" data-value="2">★</button>
+                <button class="star" data-value="3">★</button>
+                <button class="star" data-value="4">★</button>
+                <button class="star" data-value="5">★</button>
+            </div>
+            <div class="rating-labels">
+                <span>Poor</span>
+                <span>Excellent</span>
+            </div>
+
+            <div class="comment-section">
+                <label for="comment">Comment (optional)</label>
+                <textarea id="comment" placeholder="Add any notes about this item..."></textarea>
+            </div>
+
+            <div class="action-buttons">
+                <button class="btn-secondary" id="skipBtn">Skip</button>
+                <button class="btn-primary" id="saveBtn" disabled>Save Rating</button>
+                <button class="btn-primary" id="saveNextBtn" disabled>Save & Next</button>
+            </div>
+        </div>
+    </main>
+
+    <div class="keyboard-hints">
+        <span>Keyboard: 1-5 to rate • ←/→ to navigate • Enter to save & next</span>
+    </div>
+</div>
+
+<script>
+    const SESSION_ID = "{{ session_id }}";
+    document.addEventListener('DOMContentLoaded', () => {
+        initRating(SESSION_ID);
+    });
+</script>
+{% endblock %}

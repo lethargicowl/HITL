@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from typing import Optional
 import json
 import uuid
@@ -50,11 +51,21 @@ async def get_session_rows(
     # Base query
     query = db.query(DataRow).filter(DataRow.session_id == session_id)
 
-    # Apply filter
+    # Apply filter based on current user's ratings
     if filter == "rated":
-        query = query.filter(DataRow.rating != None)
+        # Rows that have a rating from the current user
+        rated_row_ids = db.query(Rating.data_row_id).filter(
+            Rating.session_id == session_id,
+            Rating.rater_id == current_user.id
+        ).subquery()
+        query = query.filter(DataRow.id.in_(rated_row_ids))
     elif filter == "unrated":
-        query = query.filter(DataRow.rating == None)
+        # Rows that don't have a rating from the current user
+        rated_row_ids = db.query(Rating.data_row_id).filter(
+            Rating.session_id == session_id,
+            Rating.rater_id == current_user.id
+        ).subquery()
+        query = query.filter(~DataRow.id.in_(rated_row_ids))
 
     # Get total count
     total = query.count()
@@ -63,28 +74,40 @@ async def get_session_rows(
     # Get paginated rows
     rows = query.order_by(DataRow.row_index).offset((page - 1) * per_page).limit(per_page).all()
 
-    # Get rated count for session
-    rated_count = db.query(Rating).filter(Rating.session_id == session_id).count()
+    # Get count of rows rated by current user
+    rated_count = db.query(Rating).filter(
+        Rating.session_id == session_id,
+        Rating.rater_id == current_user.id
+    ).count()
 
     # Build response
     items = []
     for row in rows:
-        rating_data = None
-        if row.rating:
-            rating_data = RatingResponse(
-                id=row.rating.id,
-                rating_value=row.rating.rating_value,
-                comment=row.rating.comment,
-                rated_at=row.rating.rated_at,
-                rater_id=row.rating.rater_id,
-                rater_username=row.rating.rater.username if row.rating.rater else None
+        # Get all ratings for this row
+        all_ratings = []
+        my_rating = None
+
+        for rating in row.ratings:
+            rating_response = RatingResponse(
+                id=rating.id,
+                rating_value=rating.rating_value,
+                comment=rating.comment,
+                rated_at=rating.rated_at,
+                rater_id=rating.rater_id,
+                rater_username=rating.rater.username if rating.rater else None
             )
+            all_ratings.append(rating_response)
+
+            # Check if this is the current user's rating
+            if rating.rater_id == current_user.id:
+                my_rating = rating_response
 
         items.append(DataRowResponse(
             id=row.id,
             row_index=row.row_index,
             content=json.loads(row.content),
-            rating=rating_data
+            ratings=all_ratings,
+            my_rating=my_rating
         ))
 
     return PaginatedRowsResponse(
@@ -103,7 +126,7 @@ async def create_or_update_rating(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Create or update a rating for a data row."""
+    """Create or update a rating for a data row (per rater)."""
     # Verify data row exists
     data_row = db.query(DataRow).filter(DataRow.id == rating_data.data_row_id).first()
     if not data_row:
@@ -120,14 +143,16 @@ async def create_or_update_rating(
 
     check_session_access(session, current_user, db)
 
-    # Check for existing rating
-    existing = db.query(Rating).filter(Rating.data_row_id == rating_data.data_row_id).first()
+    # Check for existing rating by this user for this row
+    existing = db.query(Rating).filter(
+        Rating.data_row_id == rating_data.data_row_id,
+        Rating.rater_id == current_user.id
+    ).first()
 
     if existing:
         # Update existing rating
         existing.rating_value = rating_data.rating_value
         existing.comment = rating_data.comment
-        existing.rater_id = current_user.id  # Update rater
         db.commit()
         db.refresh(existing)
         return RatingResponse(

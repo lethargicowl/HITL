@@ -92,24 +92,33 @@
 <script>
 const PROJECT_ID = "{{ project_id }}";
 let projectData = null;
-let selectedFile = null;
+let projectSelectedFile = null;
+
+console.log('Project detail script loaded, PROJECT_ID:', PROJECT_ID);
 
 document.addEventListener('DOMContentLoaded', () => {
+    console.log('DOMContentLoaded fired, loading project...');
     loadProject();
 });
 
 async function loadProject() {
+    console.log('loadProject() called');
     try {
-        const response = await fetch(`/api/projects/${PROJECT_ID}`);
+        console.log('Fetching project data...');
+        const response = await fetch(`/api/projects/${PROJECT_ID}`, { credentials: 'same-origin' });
+        console.log('Response status:', response.status);
         if (response.status === 401) {
+            console.log('Unauthorized, redirecting to login');
             window.location.href = '/login';
             return;
         }
         if (response.status === 404 || response.status === 403) {
+            console.log('Not found or forbidden, redirecting to dashboard');
             window.location.href = '/dashboard';
             return;
         }
         projectData = await response.json();
+        console.log('Project data loaded:', projectData);
 
         document.getElementById('projectName').textContent = projectData.name;
         document.getElementById('projectDescription').textContent = projectData.description || '';
@@ -126,7 +135,7 @@ async function loadSessions() {
     const list = document.getElementById('sessionsList');
 
     try {
-        const response = await fetch(`/api/projects/${PROJECT_ID}/sessions`);
+        const response = await fetch(`/api/projects/${PROJECT_ID}/sessions`, { credentials: 'same-origin' });
         const sessions = await response.json();
 
         if (sessions.length === 0) {
@@ -187,7 +196,7 @@ function showUploadModal() {
 
 function hideUploadModal() {
     document.getElementById('uploadModal').style.display = 'none';
-    selectedFile = null;
+    projectSelectedFile = null;
     document.getElementById('filePreview').style.display = 'none';
     document.getElementById('uploadBox').style.display = 'block';
     document.getElementById('uploadBtn').disabled = true;
@@ -206,7 +215,7 @@ function selectFile(file) {
         alert('Please select an Excel or CSV file');
         return;
     }
-    selectedFile = file;
+    projectSelectedFile = file;
     document.getElementById('fileName').textContent = file.name;
     document.getElementById('filePreview').style.display = 'flex';
     document.getElementById('uploadBox').style.display = 'none';
@@ -215,7 +224,7 @@ function selectFile(file) {
 }
 
 function removeFile() {
-    selectedFile = null;
+    projectSelectedFile = null;
     document.getElementById('filePreview').style.display = 'none';
     document.getElementById('uploadBox').style.display = 'block';
     document.getElementById('uploadBtn').disabled = true;
@@ -224,19 +233,20 @@ function removeFile() {
 
 document.getElementById('uploadForm').addEventListener('submit', async (e) => {
     e.preventDefault();
-    if (!selectedFile) return;
+    if (!projectSelectedFile) return;
 
     const errorEl = document.getElementById('uploadError');
     errorEl.style.display = 'none';
 
     const formData = new FormData();
-    formData.append('file', selectedFile);
-    formData.append('session_name', document.getElementById('sessionName').value || selectedFile.name);
+    formData.append('file', projectSelectedFile);
+    formData.append('session_name', document.getElementById('sessionName').value || projectSelectedFile.name);
 
     try {
         const response = await fetch(`/api/projects/${PROJECT_ID}/upload`, {
             method: 'POST',
-            body: formData
+            body: formData,
+            credentials: 'same-origin'
         });
 
         if (!response.ok) {
@@ -259,7 +269,7 @@ async function showAssignModal() {
     const select = document.getElementById('ratersSelect');
 
     try {
-        const response = await fetch('/api/users/raters');
+        const response = await fetch('/api/users/raters', { credentials: 'same-origin' });
         const raters = await response.json();
 
         const assignedIds = projectData.assigned_raters.map(r => r.id);
@@ -305,7 +315,8 @@ async function assignSelectedRaters() {
         const response = await fetch(`/api/projects/${PROJECT_ID}/assign`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ rater_ids: raterIds })
+            body: JSON.stringify({ rater_ids: raterIds }),
+            credentials: 'same-origin'
         });
 
         if (!response.ok) {
@@ -327,7 +338,8 @@ async function removeRater(raterId) {
 
     try {
         await fetch(`/api/projects/${PROJECT_ID}/raters/${raterId}`, {
-            method: 'DELETE'
+            method: 'DELETE',
+            credentials: 'same-origin'
         });
         loadProject();
     } catch (error) {
@@ -340,7 +352,8 @@ async function deleteProject() {
 
     try {
         const response = await fetch(`/api/projects/${PROJECT_ID}`, {
-            method: 'DELETE'
+            method: 'DELETE',
+            credentials: 'same-origin'
         });
 
         if (response.ok) {

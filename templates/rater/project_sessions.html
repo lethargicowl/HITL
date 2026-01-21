@@ -27,7 +27,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 async function loadProject() {
     try {
-        const response = await fetch(`/api/projects/${PROJECT_ID}`);
+        const response = await fetch(`/api/projects/${PROJECT_ID}`, { credentials: 'same-origin' });
         if (response.status === 401) {
             window.location.href = '/login';
             return;
@@ -52,7 +52,7 @@ async function loadSessions() {
     const list = document.getElementById('sessionsList');
 
     try {
-        const response = await fetch(`/api/projects/${PROJECT_ID}/sessions`);
+        const response = await fetch(`/api/projects/${PROJECT_ID}/sessions`, { credentials: 'same-origin' });
         const sessions = await response.json();
 
         if (sessions.length === 0) {

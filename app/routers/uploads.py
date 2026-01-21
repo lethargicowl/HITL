@@ -7,7 +7,7 @@ import uuid
 from ..database import get_db
 from ..models import (
     Session as DBSession, DataRow, Project, ProjectAssignment, User,
-    UploadResponse, SessionListItem, SessionResponse
+    UploadResponse, SessionListItem, SessionDetailResponse, ProjectBasic
 )
 from ..services.excel_parser import parse_file
 from ..dependencies import get_current_user, require_requester
@@ -68,13 +68,13 @@ async def upload_file(
     )
 
 
-@router.get("/sessions/{session_id}", response_model=SessionResponse)
+@router.get("/sessions/{session_id}", response_model=SessionDetailResponse)
 async def get_session(
     session_id: str,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Get session details."""
+    """Get session details with project info."""
     session = db.query(DBSession).filter(DBSession.id == session_id).first()
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -92,12 +92,13 @@ async def get_session(
         if not assignment:
             raise HTTPException(status_code=403, detail="Access denied")
 
-    return SessionResponse(
+    return SessionDetailResponse(
         id=session.id,
         name=session.name,
         filename=session.filename,
         columns=json.loads(session.columns),
         project_id=session.project_id,
+        project=ProjectBasic(id=project.id, name=project.name),
         created_at=session.created_at,
         row_count=len(session.rows),
         rated_count=len(session.ratings)

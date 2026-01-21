@@ -1025,3 +1025,56 @@ header h1 {
         text-align: center;
     }
 }
+
+/* Other Ratings Section */
+.other-ratings-section {
+    background: #f8f9fa;
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 20px;
+}
+
+.other-ratings-section h3 {
+    font-size: 0.9rem;
+    color: #666;
+    margin-bottom: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.no-other-ratings {
+    color: #999;
+    font-style: italic;
+    font-size: 0.9rem;
+}
+
+.other-rating {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 0;
+    border-bottom: 1px solid #eee;
+}
+
+.other-rating:last-child {
+    border-bottom: none;
+}
+
+.rater-name {
+    font-weight: 500;
+    color: #333;
+    min-width: 100px;
+}
+
+.rater-score {
+    color: #f5a623;
+    font-size: 1rem;
+    letter-spacing: 2px;
+}
+
+.rater-comment {
+    color: #666;
+    font-size: 0.85rem;
+    font-style: italic;
+    flex: 1;
+}

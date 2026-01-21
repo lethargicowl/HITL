@@ -90,21 +90,24 @@ class DataRow(Base):
     content = Column(Text, nullable=False)  # JSON object of row data
 
     session = relationship("Session", back_populates="rows")
-    rating = relationship("Rating", back_populates="data_row", uselist=False, cascade="all, delete-orphan")
+    ratings = relationship("Rating", back_populates="data_row", cascade="all, delete-orphan")
 
 
 class Rating(Base):
     __tablename__ = "ratings"
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    data_row_id = Column(String, ForeignKey("data_rows.id"), unique=True, nullable=False)
+    data_row_id = Column(String, ForeignKey("data_rows.id"), nullable=False)
     session_id = Column(String, ForeignKey("sessions.id"), nullable=False)
     rater_id = Column(String, ForeignKey("users.id"), nullable=False)
     rating_value = Column(Integer, nullable=False)  # 1-5
     comment = Column(Text, nullable=True)
     rated_at = Column(DateTime, default=datetime.utcnow)
 
-    data_row = relationship("DataRow", back_populates="rating")
+    # One rating per rater per row
+    __table_args__ = (UniqueConstraint('data_row_id', 'rater_id', name='unique_rating_per_rater'),)
+
+    data_row = relationship("DataRow", back_populates="ratings")
     session = relationship("Session", back_populates="ratings")
     rater = relationship("User", back_populates="ratings")
 
@@ -213,6 +216,29 @@ class SessionListItem(BaseModel):
         from_attributes = True
 
 
+class ProjectBasic(BaseModel):
+    id: str
+    name: str
+
+    class Config:
+        from_attributes = True
+
+
+class SessionDetailResponse(BaseModel):
+    id: str
+    name: str
+    filename: str
+    columns: List[str]
+    project_id: str
+    project: ProjectBasic
+    created_at: datetime
+    row_count: int
+    rated_count: int
+
+    class Config:
+        from_attributes = True
+
+
 # --- Rating Schemas ---
 
 class RatingResponse(BaseModel):
@@ -231,7 +257,8 @@ class DataRowResponse(BaseModel):
     id: str
     row_index: int
     content: dict
-    rating: Optional[RatingResponse] = None
+    ratings: List[RatingResponse] = []
+    my_rating: Optional[RatingResponse] = None  # Current user's rating
 
     class Config:
         from_attributes = True

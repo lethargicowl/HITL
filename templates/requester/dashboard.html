@@ -48,7 +48,7 @@ async function loadProjects() {
     const grid = document.getElementById('projectsGrid');
 
     try {
-        const response = await fetch('/api/projects');
+        const response = await fetch('/api/projects', { credentials: 'same-origin' });
         if (response.status === 401) {
             window.location.href = '/login';
             return;
@@ -115,7 +115,8 @@ document.getElementById('createProjectForm').addEventListener('submit', async (e
         const response = await fetch('/api/projects', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name, description })
+            body: JSON.stringify({ name, description }),
+            credentials: 'same-origin'
         });
 
         if (!response.ok) {

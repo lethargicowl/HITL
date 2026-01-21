@@ -1,71 +1,91 @@
-// ============== Upload Page Functions ==============
+// ============== Auth & UI Functions ==============
+
+document.addEventListener('DOMContentLoaded', () => {
+    // Logout button
+    const logoutBtn = document.getElementById('logoutBtn');
+    if (logoutBtn) {
+        logoutBtn.addEventListener('click', logout);
+    }
+
+    // Modal handling
+    document.querySelectorAll('[data-modal-target]').forEach(button => {
+        button.addEventListener('click', () => {
+            const modal = document.querySelector(button.dataset.modalTarget);
+            openModal(modal);
+        });
+    });
+
+    document.querySelectorAll('.modal-close, .modal-background').forEach(element => {
+        element.addEventListener('click', () => {
+            const modal = element.closest('.modal');
+            closeModal(modal);
+        });
+    });
+});
+
+async function logout() {
+    try {
+        const response = await fetch('/api/auth/logout', {
+            method: 'POST'
+        });
+        if (response.ok) {
+            window.location.href = '/login';
+        } else {
+            console.error('Logout failed');
+        }
+    } catch (error) {
+        console.error('Logout failed:', error);
+    }
+}
+
+function openModal(modal) {
+    if (modal == null) return;
+    modal.classList.add('is-active');
+}
+
+function closeModal(modal) {
+    if (modal == null) return;
+    modal.classList.remove('is-active');
+}
+
+// ============== Project/Upload Functions ==============
 
 let selectedFile = null;
 
-function initUpload() {
+function initProjectUpload(projectId) {
     const uploadBox = document.getElementById('uploadBox');
     const fileInput = document.getElementById('fileInput');
     const uploadForm = document.getElementById('uploadForm');
-    const uploadBtn = document.getElementById('uploadBtn');
-    const removeBtn = document.getElementById('removeFile');
-    const tryAgainBtn = document.getElementById('tryAgain');
+    
+    if (!uploadBox) return;
 
-    // Drag and drop handlers
-    uploadBox.addEventListener('dragover', (e) => {
+    uploadBox.addEventListener('dragover', e => e.preventDefault());
+    uploadBox.addEventListener('drop', e => {
         e.preventDefault();
-        uploadBox.classList.add('dragover');
-    });
-
-    uploadBox.addEventListener('dragleave', () => {
-        uploadBox.classList.remove('dragover');
-    });
-
-    uploadBox.addEventListener('drop', (e) => {
-        e.preventDefault();
-        uploadBox.classList.remove('dragover');
         const files = e.dataTransfer.files;
-        if (files.length > 0) {
-            handleFileSelect(files[0]);
-        }
+        if (files.length > 0) handleFileSelect(files[0]);
+    });
+    uploadBox.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', e => {
+        if (e.target.files.length > 0) handleFileSelect(e.target.files[0]);
     });
 
-    // Click to upload
-    uploadBox.addEventListener('click', () => {
-        fileInput.click();
-    });
-
-    fileInput.addEventListener('change', (e) => {
-        if (e.target.files.length > 0) {
-            handleFileSelect(e.target.files[0]);
-        }
-    });
-
-    // Remove file
-    removeBtn.addEventListener('click', () => {
+    document.getElementById('removeFile').addEventListener('click', () => {
         selectedFile = null;
         uploadBox.style.display = 'block';
         uploadForm.style.display = 'none';
         fileInput.value = '';
     });
 
-    // Upload button
-    uploadBtn.addEventListener('click', uploadFile);
-
-    // Try again button
-    if (tryAgainBtn) {
-        tryAgainBtn.addEventListener('click', () => {
-            document.getElementById('uploadError').style.display = 'none';
-            uploadBox.style.display = 'block';
-        });
-    }
+    document.getElementById('uploadBtn').addEventListener('click', () => uploadFile(projectId));
 }
+
 
 function handleFileSelect(file) {
     if (!file.name.match(/\.(xlsx|xls|csv)$/i)) {
-        alert('Please select an Excel file (.xlsx, .xls) or CSV file (.csv)');
+        alert('Please select an Excel or CSV file.');
         return;
     }
-
     selectedFile = file;
     document.getElementById('fileName').textContent = file.name;
     document.getElementById('uploadBox').style.display = 'none';
@@ -73,14 +93,13 @@ function handleFileSelect(file) {
     document.getElementById('sessionName').value = file.name.replace(/\.(xlsx|xls|csv)$/i, '');
 }
 
-async function uploadFile() {
-    if (!selectedFile) return;
+async function uploadFile(projectId) {
+    if (!selectedFile || !projectId) return;
 
     const uploadForm = document.getElementById('uploadForm');
     const uploadProgress = document.getElementById('uploadProgress');
     const uploadError = document.getElementById('uploadError');
     const progressFill = document.getElementById('progressFill');
-    const progressText = document.getElementById('progressText');
 
     uploadForm.style.display = 'none';
     uploadProgress.style.display = 'block';
@@ -88,31 +107,22 @@ async function uploadFile() {
 
     const formData = new FormData();
     formData.append('file', selectedFile);
-    formData.append('session_name', document.getElementById('sessionName').value || selectedFile.name);
+    formData.append('session_name', document.getElementById('sessionName').value);
 
     try {
-        progressFill.style.width = '50%';
-        progressText.textContent = 'Processing file...';
-
-        const response = await fetch('/api/upload', {
+        const response = await fetch(`/api/projects/${projectId}/upload`, {
             method: 'POST',
-            body: formData
+            body: formData,
+            credentials: 'same-origin'
         });
 
         if (!response.ok) {
             const error = await response.json();
             throw new Error(error.detail || 'Upload failed');
         }
-
+        
         progressFill.style.width = '100%';
-        progressText.textContent = 'Upload complete!';
-
-        const result = await response.json();
-
-        // Redirect to rating page
-        setTimeout(() => {
-            window.location.href = `/rate/${result.session_id}`;
-        }, 500);
+        setTimeout(() => window.location.reload(), 1000);
 
     } catch (error) {
         uploadProgress.style.display = 'none';
@@ -121,68 +131,6 @@ async function uploadFile() {
     }
 }
 
-async function loadSessions() {
-    const sessionsList = document.getElementById('sessionsList');
-
-    try {
-        const response = await fetch('/api/sessions');
-        const sessions = await response.json();
-
-        if (sessions.length === 0) {
-            sessionsList.innerHTML = '<p class="no-sessions">No sessions yet. Upload a file to get started.</p>';
-            return;
-        }
-
-        sessionsList.innerHTML = sessions.map(session => {
-            const progress = session.row_count > 0
-                ? Math.round((session.rated_count / session.row_count) * 100)
-                : 0;
-            const date = new Date(session.created_at).toLocaleDateString();
-
-            return `
-                <div class="session-item">
-                    <div class="session-info">
-                        <h3>${escapeHtml(session.name)}</h3>
-                        <p class="session-meta">${escapeHtml(session.filename)} • ${date}</p>
-                    </div>
-                    <div class="session-progress">
-                        <div class="progress-text">${session.rated_count} / ${session.row_count} rated</div>
-                        <div class="progress-bar">
-                            <div class="progress-fill" style="width: ${progress}%"></div>
-                        </div>
-                    </div>
-                    <div class="session-actions">
-                        <a href="/rate/${session.id}" class="btn-continue">Continue</a>
-                        <button class="btn-delete" onclick="deleteSession('${session.id}')">Delete</button>
-                    </div>
-                </div>
-            `;
-        }).join('');
-
-    } catch (error) {
-        sessionsList.innerHTML = '<p class="error">Failed to load sessions</p>';
-    }
-}
-
-async function deleteSession(sessionId) {
-    if (!confirm('Are you sure you want to delete this session? This cannot be undone.')) {
-        return;
-    }
-
-    try {
-        const response = await fetch(`/api/sessions/${sessionId}`, {
-            method: 'DELETE'
-        });
-
-        if (response.ok) {
-            loadSessions();
-        } else {
-            alert('Failed to delete session');
-        }
-    } catch (error) {
-        alert('Failed to delete session');
-    }
-}
 
 // ============== Rating Page Functions ==============
 
@@ -248,25 +196,29 @@ function initRating(sessionId) {
 
 async function loadSession(sessionId) {
     try {
-        const response = await fetch(`/api/sessions/${sessionId}`);
+        const response = await fetch(`/api/sessions/${sessionId}`, { credentials: 'same-origin' });
         if (!response.ok) {
-            window.location.href = '/';
+            window.location.href = '/dashboard'; // Redirect to dashboard on error
             return;
         }
         currentSession = await response.json();
         document.getElementById('sessionName').textContent = currentSession.name;
+        document.getElementById('projectName').textContent = currentSession.project.name;
+        document.getElementById('projectName').href = `/projects/${currentSession.project.id}`;
+        document.getElementById('backLink').href = `/projects/${currentSession.project.id}`;
+        
         updateProgress();
         loadRows(sessionId);
     } catch (error) {
         console.error('Failed to load session:', error);
-        window.location.href = '/';
+        window.location.href = '/dashboard';
     }
 }
 
 async function loadRows(sessionId) {
     try {
         const url = `/api/sessions/${sessionId}/rows?page=${currentPage}&per_page=1&filter=${currentFilter}`;
-        const response = await fetch(url);
+        const response = await fetch(url, { credentials: 'same-origin' });
         const data = await response.json();
 
         currentRows = data.items;
@@ -279,7 +231,11 @@ async function loadRows(sessionId) {
         if (currentRows.length > 0) {
             displayRow(currentRows[0]);
         } else {
-            document.getElementById('rowContent').innerHTML = '<p class="no-sessions">No rows to display</p>';
+            const emptyMessage = currentFilter === 'unrated' 
+                ? 'All rows have been rated!'
+                : 'No rows to display for this filter.';
+            document.getElementById('rowContent').innerHTML = `<p class="no-rows">${emptyMessage}</p>`;
+            document.getElementById('ratingControls').style.display = 'none';
             document.getElementById('ratingStatus').textContent = '';
         }
     } catch (error) {
@@ -298,23 +254,48 @@ function displayRow(row) {
 
     document.getElementById('rowContent').innerHTML = contentHtml;
     document.getElementById('rowNumber').textContent = `Row #${row.row_index}`;
+    document.getElementById('ratingControls').style.display = 'block';
 
-    // Set rating status
+    // Set rating status based on current user's rating
     const statusEl = document.getElementById('ratingStatus');
-    if (row.rating) {
-        statusEl.textContent = `Rated: ${row.rating.rating_value}/5`;
+    if (row.my_rating) {
+        statusEl.textContent = `Your rating: ${row.my_rating.rating_value}/5`;
         statusEl.className = 'rating-status rated';
-        selectedRating = row.rating.rating_value;
-        document.getElementById('comment').value = row.rating.comment || '';
+        selectedRating = row.my_rating.rating_value;
+        document.getElementById('comment').value = row.my_rating.comment || '';
     } else {
-        statusEl.textContent = 'Not rated';
+        statusEl.textContent = 'Not rated by you';
         statusEl.className = 'rating-status unrated';
         selectedRating = 0;
         document.getElementById('comment').value = '';
     }
 
+    // Display other raters' ratings
+    displayOtherRatings(row.ratings, row.my_rating);
+
     updateStars();
     updateButtons();
+}
+
+function displayOtherRatings(ratings, myRating) {
+    const container = document.getElementById('otherRatings');
+    if (!container) return;
+
+    // Filter out current user's rating
+    const otherRatings = ratings.filter(r => !myRating || r.id !== myRating.id);
+
+    if (otherRatings.length === 0) {
+        container.innerHTML = '<p class="no-other-ratings">No other ratings yet</p>';
+        return;
+    }
+
+    container.innerHTML = otherRatings.map(rating => `
+        <div class="other-rating">
+            <span class="rater-name">${escapeHtml(rating.rater_username || 'Unknown')}</span>
+            <span class="rater-score">${'★'.repeat(rating.rating_value)}${'☆'.repeat(5 - rating.rating_value)}</span>
+            ${rating.comment ? `<span class="rater-comment">"${escapeHtml(rating.comment)}"</span>` : ''}
+        </div>
+    `).join('');
 }
 
 function updateStars() {
@@ -367,36 +348,42 @@ async function saveRating(goNext) {
     try {
         const response = await fetch('/api/ratings', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 data_row_id: row.id,
                 session_id: currentSession.id,
                 rating_value: selectedRating,
                 comment: comment || null
-            })
+            }),
+            credentials: 'same-origin'
         });
 
-        if (!response.ok) {
-            throw new Error('Failed to save rating');
-        }
+        if (!response.ok) throw new Error('Failed to save rating');
 
-        // Update local state
-        if (!row.rating) {
+        const savedRating = await response.json();
+
+        if (!row.my_rating) {
             currentSession.rated_count++;
         }
-        row.rating = await response.json();
+        row.my_rating = savedRating;
+
+        // Update or add to ratings array
+        const existingIdx = row.ratings.findIndex(r => r.rater_id === savedRating.rater_id);
+        if (existingIdx >= 0) {
+            row.ratings[existingIdx] = savedRating;
+        } else {
+            row.ratings.push(savedRating);
+        }
 
         updateProgress();
 
         if (goNext && currentPage < totalRows) {
             navigateRow(1);
-        } else {
-            // Update status display
-            const statusEl = document.getElementById('ratingStatus');
-            statusEl.textContent = `Rated: ${selectedRating}/5`;
-            statusEl.className = 'rating-status rated';
+        } else if (goNext && currentFilter === 'unrated') {
+            loadRows(currentSession.id); // Load next unrated
+        }
+        else {
+            displayRow(row); // Re-display current row with updated status
         }
 
     } catch (error) {
@@ -411,27 +398,20 @@ function exportSession(sessionId) {
 }
 
 function handleKeyboard(e) {
-    // Ignore if typing in textarea
-    if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') {
-        return;
-    }
+    if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') return;
 
-    // Number keys 1-5 for rating
     if (e.key >= '1' && e.key <= '5') {
+        e.preventDefault();
         selectedRating = parseInt(e.key);
         updateStars();
         updateButtons();
     }
 
-    // Arrow keys for navigation
-    if (e.key === 'ArrowLeft') {
-        navigateRow(-1);
-    } else if (e.key === 'ArrowRight') {
-        navigateRow(1);
-    }
+    if (e.key === 'ArrowLeft') navigateRow(-1);
+    else if (e.key === 'ArrowRight' || e.key === ' ') navigateRow(1);
 
-    // Enter to save and next
     if (e.key === 'Enter' && selectedRating > 0) {
+        e.preventDefault();
         saveRating(true);
     }
 }
@@ -439,6 +419,7 @@ function handleKeyboard(e) {
 // ============== Utility Functions ==============
 
 function escapeHtml(text) {
+    if (text === null || text === undefined) return '';
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
