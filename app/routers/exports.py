@@ -6,10 +6,48 @@ import json
 import io
 
 from ..database import get_db
-from ..models import Session as DBSession, DataRow, ProjectAssignment, User, Rating
+from ..models import Session as DBSession, DataRow, ProjectAssignment, User, Rating, Project
 from ..dependencies import get_current_user
 
 router = APIRouter(prefix="/api", tags=["exports"])
+
+
+def format_response_for_export(rating, eval_type: str, eval_config: dict = None) -> dict:
+    """Format rating response based on evaluation type for export."""
+    result = {}
+
+    # Parse response JSON if available
+    response = json.loads(rating.response) if rating.response else None
+
+    if eval_type == "rating":
+        # For rating type, use rating_value
+        result["value"] = rating.rating_value
+    elif eval_type == "binary":
+        # For binary, use the selected option
+        if response and "value" in response:
+            result["value"] = response["value"]
+        else:
+            result["value"] = ""
+    elif eval_type == "multi_label":
+        # For multi-label, join selected labels
+        if response and "selected" in response:
+            result["value"] = ", ".join(response["selected"])
+        else:
+            result["value"] = ""
+    elif eval_type == "multi_criteria":
+        # For multi-criteria, return each criterion as separate field
+        if response and "criteria" in response:
+            for key, value in response["criteria"].items():
+                result[key] = value
+        elif eval_config and "criteria" in eval_config:
+            # Return empty values for each criterion
+            for crit in eval_config["criteria"]:
+                result[crit["key"]] = ""
+    else:
+        # Default fallback
+        result["value"] = rating.rating_value
+
+    return result
 
 
 @router.get("/sessions/{session_id}/export")
@@ -48,6 +86,10 @@ async def export_session(
     ).distinct().all()
     rater_names = {r.id: r.username for r in raters}
 
+    # Get project evaluation settings
+    eval_type = project.evaluation_type or "rating"
+    eval_config = json.loads(project.evaluation_config) if project.evaluation_config else None
+
     # Build data for export
     columns = json.loads(session.columns)
     export_data = []
@@ -66,20 +108,43 @@ async def export_session(
         for rater_id, rater_name in rater_names.items():
             rating = ratings_by_rater.get(rater_id)
             if rating:
-                row_data[f"Rating ({rater_name})"] = rating.rating_value
+                response_data = format_response_for_export(rating, eval_type, eval_config)
+
+                if eval_type == "multi_criteria" and eval_config and "criteria" in eval_config:
+                    # For multi-criteria, add a column for each criterion
+                    for crit in eval_config["criteria"]:
+                        key = crit["key"]
+                        label = crit.get("label", key)
+                        row_data[f"{label} ({rater_name})"] = response_data.get(key, "")
+                else:
+                    # For other types, add a single value column
+                    row_data[f"Rating ({rater_name})"] = response_data.get("value", "")
+
                 row_data[f"Comment ({rater_name})"] = rating.comment or ""
             else:
-                row_data[f"Rating ({rater_name})"] = ""
+                if eval_type == "multi_criteria" and eval_config and "criteria" in eval_config:
+                    for crit in eval_config["criteria"]:
+                        label = crit.get("label", crit["key"])
+                        row_data[f"{label} ({rater_name})"] = ""
+                else:
+                    row_data[f"Rating ({rater_name})"] = ""
                 row_data[f"Comment ({rater_name})"] = ""
 
-        # Add average rating if there are multiple ratings
-        if row.ratings:
-            avg_rating = sum(r.rating_value for r in row.ratings) / len(row.ratings)
-            row_data["Avg Rating"] = round(avg_rating, 2)
+        # Add average rating if there are multiple ratings (only for rating type)
+        if eval_type == "rating" and row.ratings:
+            valid_ratings = [r.rating_value for r in row.ratings if r.rating_value is not None]
+            if valid_ratings:
+                avg_rating = sum(valid_ratings) / len(valid_ratings)
+                row_data["Avg Rating"] = round(avg_rating, 2)
+            else:
+                row_data["Avg Rating"] = ""
             row_data["# of Ratings"] = len(row.ratings)
-        else:
+        elif eval_type == "rating":
             row_data["Avg Rating"] = ""
             row_data["# of Ratings"] = 0
+        else:
+            # For non-rating types, just add count
+            row_data["# of Ratings"] = len(row.ratings) if row.ratings else 0
 
         export_data.append(row_data)
 

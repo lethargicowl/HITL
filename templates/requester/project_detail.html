@@ -13,6 +13,17 @@
 </div>
 
 <div class="project-sections">
+    <!-- Evaluation Settings Section -->
+    <section class="section-card">
+        <div class="section-header">
+            <h2>Evaluation Settings</h2>
+            <button class="btn-secondary" onclick="showEvalSettingsModal()">Edit Settings</button>
+        </div>
+        <div class="eval-settings" id="evalSettings">
+            <p class="loading">Loading settings...</p>
+        </div>
+    </section>
+
     <!-- Datasets Section -->
     <section class="section-card">
         <div class="section-header">
@@ -86,6 +97,39 @@
         </div>
     </div>
 </div>
+
+<!-- Evaluation Settings Modal -->
+<div class="modal" id="evalSettingsModal" style="display: none;">
+    <div class="modal-content modal-large">
+        <div class="modal-header">
+            <h2>Evaluation Settings</h2>
+            <button class="modal-close" onclick="hideEvalSettingsModal()">&times;</button>
+        </div>
+        <form id="evalSettingsForm">
+            <div class="form-group">
+                <label for="editEvalType">Evaluation Type</label>
+                <select id="editEvalType" onchange="updateEditEvalConfigUI()">
+                    <option value="rating">Rating Scale (1-5 stars)</option>
+                    <option value="binary">Binary Choice (Yes/No)</option>
+                    <option value="multi_label">Multi-Label (Select multiple)</option>
+                    <option value="multi_criteria">Multi-Criteria (Rate on multiple dimensions)</option>
+                </select>
+            </div>
+            <div id="editEvalConfigSection">
+                <!-- Dynamic config UI will be inserted here -->
+            </div>
+            <div class="form-group">
+                <label for="editInstructions">Instructions for Raters</label>
+                <textarea id="editInstructions" rows="5" placeholder="Provide guidelines for how raters should evaluate items..."></textarea>
+            </div>
+            <div class="form-error" id="evalSettingsError" style="display: none;"></div>
+            <div class="modal-actions">
+                <button type="button" class="btn-secondary" onclick="hideEvalSettingsModal()">Cancel</button>
+                <button type="submit" class="btn-primary">Save Settings</button>
+            </div>
+        </form>
+    </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
@@ -123,12 +167,55 @@ async function loadProject() {
         document.getElementById('projectName').textContent = projectData.name;
         document.getElementById('projectDescription').textContent = projectData.description || '';
 
+        displayEvalSettings();
         loadSessions();
         loadRaters();
 
     } catch (error) {
         console.error('Failed to load project:', error);
     }
+}
+
+function getEvalTypeName(type) {
+    const names = {
+        'rating': 'Rating Scale',
+        'binary': 'Binary Choice',
+        'multi_label': 'Multi-Label',
+        'multi_criteria': 'Multi-Criteria'
+    };
+    return names[type] || type;
+}
+
+function displayEvalSettings() {
+    const container = document.getElementById('evalSettings');
+    const evalType = projectData.evaluation_type || 'rating';
+    const evalConfig = projectData.evaluation_config || {};
+
+    let configHtml = '';
+
+    if (evalType === 'rating') {
+        const min = evalConfig.min || 1;
+        const max = evalConfig.max || 5;
+        configHtml = `<span class="eval-config">Scale: ${min} to ${max}</span>`;
+    } else if (evalType === 'binary') {
+        const options = evalConfig.options || [];
+        const labels = options.map(o => o.label).join(' / ');
+        configHtml = `<span class="eval-config">Options: ${escapeHtml(labels)}</span>`;
+    } else if (evalType === 'multi_label') {
+        const options = evalConfig.options || [];
+        const count = options.length;
+        configHtml = `<span class="eval-config">${count} label(s) configured</span>`;
+    } else if (evalType === 'multi_criteria') {
+        const criteria = evalConfig.criteria || [];
+        const count = criteria.length;
+        configHtml = `<span class="eval-config">${count} criterion(s) configured</span>`;
+    }
+
+    container.innerHTML = `
+        <div class="eval-type-badge">${getEvalTypeName(evalType)}</div>
+        ${configHtml}
+        ${projectData.instructions ? `<div class="eval-instructions"><strong>Instructions:</strong> ${escapeHtml(projectData.instructions.substring(0, 100))}${projectData.instructions.length > 100 ? '...' : ''}</div>` : ''}
+    `;
 }
 
 async function loadSessions() {
@@ -365,6 +452,178 @@ async function deleteProject() {
         alert('Failed to delete project');
     }
 }
+
+// Evaluation Settings Modal
+function showEvalSettingsModal() {
+    document.getElementById('evalSettingsModal').style.display = 'flex';
+
+    // Populate with current settings
+    document.getElementById('editEvalType').value = projectData.evaluation_type || 'rating';
+    document.getElementById('editInstructions').value = projectData.instructions || '';
+
+    updateEditEvalConfigUI();
+}
+
+function hideEvalSettingsModal() {
+    document.getElementById('evalSettingsModal').style.display = 'none';
+    document.getElementById('evalSettingsError').style.display = 'none';
+}
+
+function updateEditEvalConfigUI() {
+    const evalType = document.getElementById('editEvalType').value;
+    const configSection = document.getElementById('editEvalConfigSection');
+    const config = projectData.evaluation_config || {};
+
+    if (evalType === 'rating') {
+        const min = config.min || 1;
+        const max = config.max || 5;
+        configSection.innerHTML = `
+            <div class="form-row">
+                <div class="form-group half">
+                    <label for="editRatingMin">Min Value</label>
+                    <input type="number" id="editRatingMin" value="${min}" min="1" max="10">
+                </div>
+                <div class="form-group half">
+                    <label for="editRatingMax">Max Value</label>
+                    <input type="number" id="editRatingMax" value="${max}" min="1" max="10">
+                </div>
+            </div>
+        `;
+    } else if (evalType === 'binary') {
+        const options = config.options || [{ value: 'yes', label: 'Yes' }, { value: 'no', label: 'No' }];
+        configSection.innerHTML = `
+            <div class="form-group">
+                <label>Binary Options</label>
+                <div class="binary-options">
+                    <div class="form-row">
+                        <input type="text" id="editBinaryOption1Value" value="${escapeHtml(options[0]?.value || 'yes')}" placeholder="Value">
+                        <input type="text" id="editBinaryOption1Label" value="${escapeHtml(options[0]?.label || 'Yes')}" placeholder="Label">
+                    </div>
+                    <div class="form-row">
+                        <input type="text" id="editBinaryOption2Value" value="${escapeHtml(options[1]?.value || 'no')}" placeholder="Value">
+                        <input type="text" id="editBinaryOption2Label" value="${escapeHtml(options[1]?.label || 'No')}" placeholder="Label">
+                    </div>
+                </div>
+            </div>
+        `;
+    } else if (evalType === 'multi_label') {
+        const options = config.options || [];
+        const text = options.map(o => `${o.value}:${o.label}`).join('\n');
+        configSection.innerHTML = `
+            <div class="form-group">
+                <label>Labels (one per line)</label>
+                <textarea id="editMultiLabelOptions" rows="4" placeholder="accurate:Factually Accurate&#10;helpful:Helpful&#10;safe:Safe">${escapeHtml(text)}</textarea>
+                <small>Format: value:Label (e.g., "accurate:Factually Accurate")</small>
+            </div>
+        `;
+    } else if (evalType === 'multi_criteria') {
+        const criteria = config.criteria || [];
+        const text = criteria.map(c => `${c.key}:${c.label}:${c.min}:${c.max}`).join('\n');
+        configSection.innerHTML = `
+            <div class="form-group">
+                <label>Criteria (one per line)</label>
+                <textarea id="editMultiCriteriaOptions" rows="4" placeholder="accuracy:Accuracy:1:5&#10;helpfulness:Helpfulness:1:5">${escapeHtml(text)}</textarea>
+                <small>Format: key:Label:min:max (e.g., "accuracy:Accuracy:1:5")</small>
+            </div>
+        `;
+    } else {
+        configSection.innerHTML = '';
+    }
+}
+
+function buildEditEvalConfig() {
+    const evalType = document.getElementById('editEvalType').value;
+
+    if (evalType === 'rating') {
+        const min = parseInt(document.getElementById('editRatingMin')?.value || '1');
+        const max = parseInt(document.getElementById('editRatingMax')?.value || '5');
+        return {
+            min: min,
+            max: max,
+            labels: { [min]: "Poor", [max]: "Excellent" }
+        };
+    } else if (evalType === 'binary') {
+        return {
+            options: [
+                {
+                    value: document.getElementById('editBinaryOption1Value')?.value || 'yes',
+                    label: document.getElementById('editBinaryOption1Label')?.value || 'Yes'
+                },
+                {
+                    value: document.getElementById('editBinaryOption2Value')?.value || 'no',
+                    label: document.getElementById('editBinaryOption2Label')?.value || 'No'
+                }
+            ]
+        };
+    } else if (evalType === 'multi_label') {
+        const text = document.getElementById('editMultiLabelOptions')?.value || '';
+        const options = text.split('\n')
+            .filter(line => line.trim())
+            .map(line => {
+                const [value, label] = line.split(':').map(s => s.trim());
+                return { value: value || label, label: label || value };
+            });
+        return {
+            options: options.length > 0 ? options : [{ value: 'option1', label: 'Option 1' }],
+            min_select: 0,
+            max_select: null
+        };
+    } else if (evalType === 'multi_criteria') {
+        const text = document.getElementById('editMultiCriteriaOptions')?.value || '';
+        const criteria = text.split('\n')
+            .filter(line => line.trim())
+            .map(line => {
+                const parts = line.split(':').map(s => s.trim());
+                return {
+                    key: parts[0] || 'quality',
+                    label: parts[1] || parts[0] || 'Quality',
+                    min: parseInt(parts[2]) || 1,
+                    max: parseInt(parts[3]) || 5
+                };
+            });
+        return {
+            criteria: criteria.length > 0 ? criteria : [{ key: 'quality', label: 'Quality', min: 1, max: 5 }]
+        };
+    }
+
+    return null;
+}
+
+document.getElementById('evalSettingsForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const errorEl = document.getElementById('evalSettingsError');
+    errorEl.style.display = 'none';
+
+    const evaluation_type = document.getElementById('editEvalType').value;
+    const evaluation_config = buildEditEvalConfig();
+    const instructions = document.getElementById('editInstructions').value || null;
+
+    try {
+        const response = await fetch(`/api/projects/${PROJECT_ID}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                evaluation_type,
+                evaluation_config,
+                instructions
+            }),
+            credentials: 'same-origin'
+        });
+
+        if (!response.ok) {
+            const data = await response.json();
+            throw new Error(data.detail || 'Failed to update settings');
+        }
+
+        projectData = await response.json();
+        hideEvalSettingsModal();
+        displayEvalSettings();
+
+    } catch (error) {
+        errorEl.textContent = error.message;
+        errorEl.style.display = 'block';
+    }
+});
 
 // Close modals on outside click
 document.querySelectorAll('.modal').forEach(modal => {

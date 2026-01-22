@@ -91,6 +91,7 @@ async def get_session_rows(
             rating_response = RatingResponse(
                 id=rating.id,
                 rating_value=rating.rating_value,
+                response=json.loads(rating.response) if rating.response else None,
                 comment=rating.comment,
                 rated_at=rating.rated_at,
                 rater_id=rating.rater_id,
@@ -149,15 +150,28 @@ async def create_or_update_rating(
         Rating.rater_id == current_user.id
     ).first()
 
+    # Handle response data - extract rating_value from response if using rating type
+    response_data = rating_data.response
+    rating_value = rating_data.rating_value
+
+    # If response is provided and contains a value field, use it for rating_value
+    if response_data and "value" in response_data:
+        if isinstance(response_data["value"], int):
+            rating_value = response_data["value"]
+
     if existing:
         # Update existing rating
-        existing.rating_value = rating_data.rating_value
+        existing.rating_value = rating_value
+        existing.response = json.dumps(response_data) if response_data else None
         existing.comment = rating_data.comment
+        if rating_data.time_spent_ms:
+            existing.time_spent_ms = rating_data.time_spent_ms
         db.commit()
         db.refresh(existing)
         return RatingResponse(
             id=existing.id,
             rating_value=existing.rating_value,
+            response=json.loads(existing.response) if existing.response else None,
             comment=existing.comment,
             rated_at=existing.rated_at,
             rater_id=existing.rater_id,
@@ -170,8 +184,10 @@ async def create_or_update_rating(
         data_row_id=rating_data.data_row_id,
         session_id=rating_data.session_id,
         rater_id=current_user.id,
-        rating_value=rating_data.rating_value,
-        comment=rating_data.comment
+        rating_value=rating_value,
+        response=json.dumps(response_data) if response_data else None,
+        comment=rating_data.comment,
+        time_spent_ms=rating_data.time_spent_ms
     )
     db.add(new_rating)
     db.commit()
@@ -180,6 +196,7 @@ async def create_or_update_rating(
     return RatingResponse(
         id=new_rating.id,
         rating_value=new_rating.rating_value,
+        response=json.loads(new_rating.response) if new_rating.response else None,
         comment=new_rating.comment,
         rated_at=new_rating.rated_at,
         rater_id=new_rating.rater_id,

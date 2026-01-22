@@ -142,8 +142,13 @@ let currentPage = 1;
 let totalRows = 0;
 let selectedRating = 0;
 
+// Evaluation state
+let evaluationType = 'rating';
+let evaluationConfig = null;
+let currentResponse = null;  // Stores the current evaluation response
+
 function initRating(sessionId) {
-    // Load session data
+    // Load session data (this will also render the evaluation form)
     loadSession(sessionId);
 
     // Set up filter buttons
@@ -160,27 +165,6 @@ function initRating(sessionId) {
     // Set up navigation
     document.getElementById('prevBtn').addEventListener('click', () => navigateRow(-1));
     document.getElementById('nextBtn').addEventListener('click', () => navigateRow(1));
-
-    // Set up star rating
-    const stars = document.querySelectorAll('.star');
-    stars.forEach(star => {
-        star.addEventListener('click', () => {
-            selectedRating = parseInt(star.dataset.value);
-            updateStars();
-            updateButtons();
-        });
-
-        star.addEventListener('mouseenter', () => {
-            const value = parseInt(star.dataset.value);
-            stars.forEach(s => {
-                s.classList.toggle('hover', parseInt(s.dataset.value) <= value);
-            });
-        });
-
-        star.addEventListener('mouseleave', () => {
-            stars.forEach(s => s.classList.remove('hover'));
-        });
-    });
 
     // Set up action buttons
     document.getElementById('skipBtn').addEventListener('click', () => navigateRow(1));
@@ -206,13 +190,223 @@ async function loadSession(sessionId) {
         document.getElementById('projectName').textContent = currentSession.project.name;
         document.getElementById('projectName').href = `/projects/${currentSession.project.id}`;
         document.getElementById('backLink').href = `/projects/${currentSession.project.id}`;
-        
+
+        // Extract evaluation settings from project
+        evaluationType = currentSession.project.evaluation_type || 'rating';
+        evaluationConfig = currentSession.project.evaluation_config || {};
+
+        // Display instructions if available
+        if (currentSession.project.instructions) {
+            const instructionsSection = document.getElementById('instructionsSection');
+            const instructionsContent = document.getElementById('instructionsContent');
+            if (instructionsSection && instructionsContent) {
+                instructionsSection.style.display = 'block';
+                instructionsContent.innerHTML = escapeHtml(currentSession.project.instructions).replace(/\n/g, '<br>');
+            }
+        }
+
+        // Render the appropriate evaluation form
+        renderEvaluationForm();
+
         updateProgress();
         loadRows(sessionId);
     } catch (error) {
         console.error('Failed to load session:', error);
         window.location.href = '/dashboard';
     }
+}
+
+function toggleInstructions() {
+    const content = document.getElementById('instructionsContent');
+    const toggle = document.getElementById('instructionsToggle');
+    if (content.style.display === 'none') {
+        content.style.display = 'block';
+        toggle.textContent = '▲';
+    } else {
+        content.style.display = 'none';
+        toggle.textContent = '▼';
+    }
+}
+
+function renderEvaluationForm() {
+    const formContainer = document.getElementById('evaluationForm');
+    if (!formContainer) return;
+
+    if (evaluationType === 'rating') {
+        renderRatingForm(formContainer);
+    } else if (evaluationType === 'binary') {
+        renderBinaryForm(formContainer);
+    } else if (evaluationType === 'multi_label') {
+        renderMultiLabelForm(formContainer);
+    } else if (evaluationType === 'multi_criteria') {
+        renderMultiCriteriaForm(formContainer);
+    } else {
+        // Default to rating
+        renderRatingForm(formContainer);
+    }
+}
+
+function renderRatingForm(container) {
+    const min = evaluationConfig.min || 1;
+    const max = evaluationConfig.max || 5;
+    const labels = evaluationConfig.labels || {};
+
+    let starsHtml = '';
+    for (let i = min; i <= max; i++) {
+        starsHtml += `<button class="star" data-value="${i}">★</button>`;
+    }
+
+    container.innerHTML = `
+        <div class="star-rating" id="starRating">
+            ${starsHtml}
+        </div>
+        <div class="rating-labels" id="ratingLabels">
+            <span>${escapeHtml(labels[min] || 'Poor')}</span>
+            <span>${escapeHtml(labels[max] || 'Excellent')}</span>
+        </div>
+    `;
+
+    // Re-attach star event listeners
+    setupStarListeners();
+}
+
+function renderBinaryForm(container) {
+    const options = evaluationConfig.options || [
+        { value: 'yes', label: 'Yes' },
+        { value: 'no', label: 'No' }
+    ];
+
+    const buttonsHtml = options.map(opt => `
+        <button class="binary-btn" data-value="${escapeHtml(opt.value)}">${escapeHtml(opt.label)}</button>
+    `).join('');
+
+    container.innerHTML = `
+        <div class="binary-buttons" id="binaryButtons">
+            ${buttonsHtml}
+        </div>
+    `;
+
+    // Attach event listeners
+    document.querySelectorAll('.binary-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.binary-btn').forEach(b => b.classList.remove('selected'));
+            btn.classList.add('selected');
+            currentResponse = { value: btn.dataset.value };
+            updateButtons();
+        });
+    });
+}
+
+function renderMultiLabelForm(container) {
+    const options = evaluationConfig.options || [];
+    const minSelect = evaluationConfig.min_select || 0;
+    const maxSelect = evaluationConfig.max_select;
+
+    const checkboxesHtml = options.map(opt => `
+        <label class="multi-label-option">
+            <input type="checkbox" value="${escapeHtml(opt.value)}" onchange="updateMultiLabelSelection()">
+            ${escapeHtml(opt.label)}
+        </label>
+    `).join('');
+
+    container.innerHTML = `
+        <div class="multi-label-options" id="multiLabelOptions">
+            ${checkboxesHtml}
+        </div>
+        ${maxSelect ? `<small>Select ${minSelect} to ${maxSelect} options</small>` : ''}
+    `;
+}
+
+function updateMultiLabelSelection() {
+    const checkboxes = document.querySelectorAll('#multiLabelOptions input[type="checkbox"]:checked');
+    const selected = Array.from(checkboxes).map(cb => cb.value);
+    currentResponse = { selected: selected };
+    updateButtons();
+}
+
+function renderMultiCriteriaForm(container) {
+    const criteria = evaluationConfig.criteria || [];
+
+    const criteriaHtml = criteria.map(crit => {
+        const min = crit.min || 1;
+        const max = crit.max || 5;
+        let starsHtml = '';
+        for (let i = min; i <= max; i++) {
+            starsHtml += `<button class="star criteria-star" data-criterion="${escapeHtml(crit.key)}" data-value="${i}">★</button>`;
+        }
+        return `
+            <div class="criterion-row" data-key="${escapeHtml(crit.key)}">
+                <label>${escapeHtml(crit.label)}</label>
+                <div class="criterion-stars">
+                    ${starsHtml}
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    container.innerHTML = `
+        <div class="multi-criteria-form" id="multiCriteriaForm">
+            ${criteriaHtml}
+        </div>
+    `;
+
+    // Initialize response object
+    currentResponse = { criteria: {} };
+
+    // Attach event listeners
+    document.querySelectorAll('.criteria-star').forEach(star => {
+        star.addEventListener('click', () => {
+            const key = star.dataset.criterion;
+            const value = parseInt(star.dataset.value);
+
+            // Update selection for this criterion
+            document.querySelectorAll(`.criteria-star[data-criterion="${key}"]`).forEach(s => {
+                const sValue = parseInt(s.dataset.value);
+                s.classList.toggle('active', sValue <= value);
+            });
+
+            // Update response
+            if (!currentResponse) currentResponse = { criteria: {} };
+            currentResponse.criteria[key] = value;
+
+            updateButtons();
+        });
+
+        star.addEventListener('mouseenter', () => {
+            const key = star.dataset.criterion;
+            const value = parseInt(star.dataset.value);
+            document.querySelectorAll(`.criteria-star[data-criterion="${key}"]`).forEach(s => {
+                s.classList.toggle('hover', parseInt(s.dataset.value) <= value);
+            });
+        });
+
+        star.addEventListener('mouseleave', () => {
+            document.querySelectorAll('.criteria-star').forEach(s => s.classList.remove('hover'));
+        });
+    });
+}
+
+function setupStarListeners() {
+    const stars = document.querySelectorAll('#starRating .star');
+    stars.forEach(star => {
+        star.addEventListener('click', () => {
+            selectedRating = parseInt(star.dataset.value);
+            currentResponse = { value: selectedRating };
+            updateStars();
+            updateButtons();
+        });
+
+        star.addEventListener('mouseenter', () => {
+            const value = parseInt(star.dataset.value);
+            stars.forEach(s => {
+                s.classList.toggle('hover', parseInt(s.dataset.value) <= value);
+            });
+        });
+
+        star.addEventListener('mouseleave', () => {
+            stars.forEach(s => s.classList.remove('hover'));
+        });
+    });
 }
 
 async function loadRows(sessionId) {
@@ -256,18 +450,66 @@ function displayRow(row) {
     document.getElementById('rowNumber').textContent = `Row #${row.row_index}`;
     document.getElementById('ratingControls').style.display = 'block';
 
-    // Set rating status based on current user's rating
+    // Set rating status and populate form based on existing rating
     const statusEl = document.getElementById('ratingStatus');
     if (row.my_rating) {
-        statusEl.textContent = `Your rating: ${row.my_rating.rating_value}/5`;
         statusEl.className = 'rating-status rated';
-        selectedRating = row.my_rating.rating_value;
         document.getElementById('comment').value = row.my_rating.comment || '';
+
+        // Restore previous response
+        if (row.my_rating.response) {
+            currentResponse = row.my_rating.response;
+        } else if (row.my_rating.rating_value) {
+            currentResponse = { value: row.my_rating.rating_value };
+        }
+
+        // Set status text and restore form state based on evaluation type
+        if (evaluationType === 'rating') {
+            selectedRating = row.my_rating.rating_value || (currentResponse?.value) || 0;
+            statusEl.textContent = `Your rating: ${selectedRating}/${evaluationConfig.max || 5}`;
+        } else if (evaluationType === 'binary') {
+            const value = currentResponse?.value || '';
+            const option = (evaluationConfig.options || []).find(o => o.value === value);
+            statusEl.textContent = `Your choice: ${option?.label || value}`;
+            // Restore binary selection
+            document.querySelectorAll('.binary-btn').forEach(btn => {
+                btn.classList.toggle('selected', btn.dataset.value === value);
+            });
+        } else if (evaluationType === 'multi_label') {
+            const selected = currentResponse?.selected || [];
+            statusEl.textContent = `Selected: ${selected.length} option(s)`;
+            // Restore multi-label selection
+            document.querySelectorAll('#multiLabelOptions input[type="checkbox"]').forEach(cb => {
+                cb.checked = selected.includes(cb.value);
+            });
+        } else if (evaluationType === 'multi_criteria') {
+            const criteria = currentResponse?.criteria || {};
+            const count = Object.keys(criteria).length;
+            statusEl.textContent = `Rated: ${count} criterion(s)`;
+            // Restore multi-criteria selection
+            Object.entries(criteria).forEach(([key, value]) => {
+                document.querySelectorAll(`.criteria-star[data-criterion="${key}"]`).forEach(s => {
+                    s.classList.toggle('active', parseInt(s.dataset.value) <= value);
+                });
+            });
+        } else {
+            statusEl.textContent = 'Rated';
+        }
     } else {
         statusEl.textContent = 'Not rated by you';
         statusEl.className = 'rating-status unrated';
         selectedRating = 0;
+        currentResponse = null;
         document.getElementById('comment').value = '';
+
+        // Clear form state
+        if (evaluationType === 'binary') {
+            document.querySelectorAll('.binary-btn').forEach(btn => btn.classList.remove('selected'));
+        } else if (evaluationType === 'multi_label') {
+            document.querySelectorAll('#multiLabelOptions input[type="checkbox"]').forEach(cb => cb.checked = false);
+        } else if (evaluationType === 'multi_criteria') {
+            document.querySelectorAll('.criteria-star').forEach(s => s.classList.remove('active'));
+        }
     }
 
     // Display other raters' ratings
@@ -289,13 +531,43 @@ function displayOtherRatings(ratings, myRating) {
         return;
     }
 
-    container.innerHTML = otherRatings.map(rating => `
-        <div class="other-rating">
-            <span class="rater-name">${escapeHtml(rating.rater_username || 'Unknown')}</span>
-            <span class="rater-score">${'★'.repeat(rating.rating_value)}${'☆'.repeat(5 - rating.rating_value)}</span>
-            ${rating.comment ? `<span class="rater-comment">"${escapeHtml(rating.comment)}"</span>` : ''}
-        </div>
-    `).join('');
+    container.innerHTML = otherRatings.map(rating => {
+        let scoreHtml = '';
+
+        if (evaluationType === 'rating') {
+            const max = evaluationConfig.max || 5;
+            const value = rating.rating_value || (rating.response?.value) || 0;
+            scoreHtml = `<span class="rater-score">${'★'.repeat(value)}${'☆'.repeat(max - value)}</span>`;
+        } else if (evaluationType === 'binary') {
+            const value = rating.response?.value || '';
+            const option = (evaluationConfig.options || []).find(o => o.value === value);
+            scoreHtml = `<span class="rater-choice">${escapeHtml(option?.label || value)}</span>`;
+        } else if (evaluationType === 'multi_label') {
+            const selected = rating.response?.selected || [];
+            const labels = selected.map(v => {
+                const opt = (evaluationConfig.options || []).find(o => o.value === v);
+                return opt?.label || v;
+            });
+            scoreHtml = `<span class="rater-labels">${escapeHtml(labels.join(', '))}</span>`;
+        } else if (evaluationType === 'multi_criteria') {
+            const criteria = rating.response?.criteria || {};
+            const items = Object.entries(criteria).map(([key, value]) => {
+                const crit = (evaluationConfig.criteria || []).find(c => c.key === key);
+                return `${crit?.label || key}: ${value}`;
+            });
+            scoreHtml = `<span class="rater-criteria">${escapeHtml(items.join(' | '))}</span>`;
+        } else {
+            scoreHtml = `<span class="rater-score">${rating.rating_value || '-'}</span>`;
+        }
+
+        return `
+            <div class="other-rating">
+                <span class="rater-name">${escapeHtml(rating.rater_username || 'Unknown')}</span>
+                ${scoreHtml}
+                ${rating.comment ? `<span class="rater-comment">"${escapeHtml(rating.comment)}"</span>` : ''}
+            </div>
+        `;
+    }).join('');
 }
 
 function updateStars() {
@@ -306,9 +578,27 @@ function updateStars() {
 }
 
 function updateButtons() {
-    const hasRating = selectedRating > 0;
-    document.getElementById('saveBtn').disabled = !hasRating;
-    document.getElementById('saveNextBtn').disabled = !hasRating;
+    let hasValidResponse = false;
+
+    if (evaluationType === 'rating') {
+        hasValidResponse = selectedRating > 0;
+    } else if (evaluationType === 'binary') {
+        hasValidResponse = currentResponse && currentResponse.value;
+    } else if (evaluationType === 'multi_label') {
+        const minSelect = evaluationConfig.min_select || 0;
+        const selected = currentResponse?.selected || [];
+        hasValidResponse = selected.length >= minSelect;
+    } else if (evaluationType === 'multi_criteria') {
+        const criteria = evaluationConfig.criteria || [];
+        const responses = currentResponse?.criteria || {};
+        // Require all criteria to be rated
+        hasValidResponse = criteria.length > 0 && Object.keys(responses).length === criteria.length;
+    } else {
+        hasValidResponse = selectedRating > 0 || currentResponse;
+    }
+
+    document.getElementById('saveBtn').disabled = !hasValidResponse;
+    document.getElementById('saveNextBtn').disabled = !hasValidResponse;
 }
 
 function updateProgress() {
@@ -340,21 +630,35 @@ function navigateRow(direction) {
 }
 
 async function saveRating(goNext) {
-    if (selectedRating === 0 || currentRows.length === 0) return;
+    if (currentRows.length === 0) return;
+
+    // Validate that we have a response
+    if (evaluationType === 'rating' && selectedRating === 0) return;
+    if (!currentResponse && evaluationType !== 'rating') return;
 
     const row = currentRows[0];
     const comment = document.getElementById('comment').value.trim();
+
+    // Build the request body
+    const requestBody = {
+        data_row_id: row.id,
+        session_id: currentSession.id,
+        comment: comment || null
+    };
+
+    // Add rating_value for rating type (backward compatibility)
+    if (evaluationType === 'rating') {
+        requestBody.rating_value = selectedRating;
+        requestBody.response = { value: selectedRating };
+    } else {
+        requestBody.response = currentResponse;
+    }
 
     try {
         const response = await fetch('/api/ratings', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                data_row_id: row.id,
-                session_id: currentSession.id,
-                rating_value: selectedRating,
-                comment: comment || null
-            }),
+            body: JSON.stringify(requestBody),
             credentials: 'same-origin'
         });
 
@@ -400,19 +704,52 @@ function exportSession(sessionId) {
 function handleKeyboard(e) {
     if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') return;
 
-    if (e.key >= '1' && e.key <= '5') {
-        e.preventDefault();
-        selectedRating = parseInt(e.key);
-        updateStars();
-        updateButtons();
+    // Handle number keys for rating type
+    if (evaluationType === 'rating') {
+        const max = evaluationConfig.max || 5;
+        const min = evaluationConfig.min || 1;
+        const keyNum = parseInt(e.key);
+        if (!isNaN(keyNum) && keyNum >= min && keyNum <= max) {
+            e.preventDefault();
+            selectedRating = keyNum;
+            currentResponse = { value: selectedRating };
+            updateStars();
+            updateButtons();
+        }
     }
 
+    // Handle Y/N keys for binary type
+    if (evaluationType === 'binary') {
+        const options = evaluationConfig.options || [];
+        const key = e.key.toLowerCase();
+
+        // Match by first letter of value or label
+        const matchedOption = options.find(o =>
+            o.value.toLowerCase().startsWith(key) ||
+            o.label.toLowerCase().startsWith(key)
+        );
+
+        if (matchedOption) {
+            e.preventDefault();
+            currentResponse = { value: matchedOption.value };
+            document.querySelectorAll('.binary-btn').forEach(btn => {
+                btn.classList.toggle('selected', btn.dataset.value === matchedOption.value);
+            });
+            updateButtons();
+        }
+    }
+
+    // Navigation
     if (e.key === 'ArrowLeft') navigateRow(-1);
     else if (e.key === 'ArrowRight' || e.key === ' ') navigateRow(1);
 
-    if (e.key === 'Enter' && selectedRating > 0) {
-        e.preventDefault();
-        saveRating(true);
+    // Save on Enter (if valid response)
+    if (e.key === 'Enter') {
+        const saveBtn = document.getElementById('saveBtn');
+        if (!saveBtn.disabled) {
+            e.preventDefault();
+            saveRating(true);
+        }
     }
 }
 

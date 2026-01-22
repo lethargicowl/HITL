@@ -7,7 +7,7 @@ import uuid
 from ..database import get_db
 from ..models import (
     Session as DBSession, DataRow, Project, ProjectAssignment, User,
-    UploadResponse, SessionListItem, SessionDetailResponse, ProjectBasic
+    UploadResponse, SessionListItem, SessionDetailResponse, ProjectDetailForSession
 )
 from ..services.excel_parser import parse_file
 from ..dependencies import get_current_user, require_requester
@@ -98,7 +98,13 @@ async def get_session(
         filename=session.filename,
         columns=json.loads(session.columns),
         project_id=session.project_id,
-        project=ProjectBasic(id=project.id, name=project.name),
+        project=ProjectDetailForSession(
+            id=project.id,
+            name=project.name,
+            evaluation_type=project.evaluation_type or "rating",
+            evaluation_config=json.loads(project.evaluation_config) if project.evaluation_config else None,
+            instructions=project.instructions
+        ),
         created_at=session.created_at,
         row_count=len(session.rows),
         rated_count=len(session.ratings)

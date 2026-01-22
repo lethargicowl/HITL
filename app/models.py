@@ -46,6 +46,11 @@ class Project(Base):
     owner_id = Column(String, ForeignKey("users.id"), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
+    # Evaluation schema fields
+    evaluation_type = Column(String, default="rating")  # rating, binary, multi_label, multi_criteria
+    evaluation_config = Column(Text, nullable=True)  # JSON config for the evaluation type
+    instructions = Column(Text, nullable=True)  # Markdown instructions for raters
+
     # Relationships
     owner = relationship("User", back_populates="owned_projects")
     sessions = relationship("Session", back_populates="project", cascade="all, delete-orphan")
@@ -100,8 +105,10 @@ class Rating(Base):
     data_row_id = Column(String, ForeignKey("data_rows.id"), nullable=False)
     session_id = Column(String, ForeignKey("sessions.id"), nullable=False)
     rater_id = Column(String, ForeignKey("users.id"), nullable=False)
-    rating_value = Column(Integer, nullable=False)  # 1-5
+    rating_value = Column(Integer, nullable=True)  # Kept for backward compatibility and simple queries
+    response = Column(Text, nullable=True)  # JSON - flexible response for all evaluation types
     comment = Column(Text, nullable=True)
+    time_spent_ms = Column(Integer, nullable=True)  # Time spent on this rating
     rated_at = Column(DateTime, default=datetime.utcnow)
 
     # One rating per rater per row
@@ -147,9 +154,30 @@ class UserBasic(BaseModel):
 
 # --- Project Schemas ---
 
+class EvaluationConfig(BaseModel):
+    """Configuration for different evaluation types."""
+    # For rating type
+    min: Optional[int] = 1
+    max: Optional[int] = 5
+    labels: Optional[dict] = None  # e.g., {"1": "Poor", "5": "Excellent"}
+
+    # For binary type
+    options: Optional[List[dict]] = None  # e.g., [{"value": "yes", "label": "Yes"}, ...]
+
+    # For multi_label type
+    min_select: Optional[int] = 0
+    max_select: Optional[int] = None
+
+    # For multi_criteria type
+    criteria: Optional[List[dict]] = None  # e.g., [{"key": "accuracy", "label": "Accuracy", "min": 1, "max": 5}]
+
+
 class ProjectCreate(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     description: Optional[str] = None
+    evaluation_type: Optional[str] = "rating"  # rating, binary, multi_label, multi_criteria
+    evaluation_config: Optional[dict] = None
+    instructions: Optional[str] = None
 
 
 class ProjectResponse(BaseModel):
@@ -158,6 +186,9 @@ class ProjectResponse(BaseModel):
     description: Optional[str]
     owner_id: str
     created_at: datetime
+    evaluation_type: str = "rating"
+    evaluation_config: Optional[dict] = None
+    instructions: Optional[str] = None
     session_count: int = 0
     total_rows: int = 0
     rated_rows: int = 0
@@ -172,6 +203,7 @@ class ProjectListItem(BaseModel):
     name: str
     description: Optional[str]
     created_at: datetime
+    evaluation_type: str = "rating"
     session_count: int = 0
     total_rows: int = 0
     rated_rows: int = 0
@@ -224,13 +256,24 @@ class ProjectBasic(BaseModel):
         from_attributes = True
 
 
+class ProjectDetailForSession(BaseModel):
+    id: str
+    name: str
+    evaluation_type: str = "rating"
+    evaluation_config: Optional[dict] = None
+    instructions: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
 class SessionDetailResponse(BaseModel):
     id: str
     name: str
     filename: str
     columns: List[str]
     project_id: str
-    project: ProjectBasic
+    project: ProjectDetailForSession
     created_at: datetime
     row_count: int
     rated_count: int
@@ -243,8 +286,9 @@ class SessionDetailResponse(BaseModel):
 
 class RatingResponse(BaseModel):
     id: str
-    rating_value: int
-    comment: Optional[str]
+    rating_value: Optional[int] = None
+    response: Optional[dict] = None  # Flexible response for all evaluation types
+    comment: Optional[str] = None
     rated_at: datetime
     rater_id: Optional[str] = None
     rater_username: Optional[str] = None
@@ -276,12 +320,15 @@ class PaginatedRowsResponse(BaseModel):
 class RatingCreate(BaseModel):
     data_row_id: str
     session_id: str
-    rating_value: int = Field(ge=1, le=5)
+    rating_value: Optional[int] = None  # Kept for backward compatibility
+    response: Optional[dict] = None  # Flexible response for all evaluation types
     comment: Optional[str] = None
+    time_spent_ms: Optional[int] = None
 
 
 class RatingUpdate(BaseModel):
-    rating_value: int = Field(ge=1, le=5)
+    rating_value: Optional[int] = None
+    response: Optional[dict] = None
     comment: Optional[str] = None
 
 

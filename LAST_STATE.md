@@ -44,9 +44,16 @@ HITL/
 
 ## Phase 2: Implementation Tasks
 
-### Task 2.1: Evaluation Schema System ⭐ START HERE
+### Task 2.1: Evaluation Schema System ✅ COMPLETE
 
 **Goal**: Replace fixed 1-5 stars with configurable evaluation types.
+
+**Implemented**:
+- Added `evaluation_type`, `evaluation_config`, `instructions` fields to Project model
+- Added flexible `response` JSON field to Rating model (keeps `rating_value` for backward compatibility)
+- Created dynamic evaluation forms in frontend (rating, binary, multi_label, multi_criteria)
+- Updated exports to handle different evaluation types
+- Added PATCH endpoint for updating project evaluation settings
 
 #### Models to Add (`models.py`)
 ```python
@@ -123,7 +130,7 @@ class Evaluation(Base):  # Was: Rating
 
 ---
 
-### Task 2.2: Pairwise Comparison
+### Task 2.2: Pairwise Comparison ⭐ START HERE
 
 **Goal**: A vs B preference evaluation for RLHF.
 
