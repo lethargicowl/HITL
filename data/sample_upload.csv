@@ -1,0 +1,6 @@
+question,expected_answer,difficulty,category
+"What is the capital of France?","Paris",easy,geography
+"2 + 2 equals what?","4",easy,math
+"Who wrote '1984'?","George Orwell",medium,literature
+"Define photosynthesis in one line","Process by which plants convert light to energy",medium,science
+"Name the largest planet in our solar system","Jupiter",hard,astronomy

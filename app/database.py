@@ -3,7 +3,10 @@ from sqlalchemy.orm import sessionmaker, declarative_base
 import os
 
 # Database file path
-DB_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "hitl.db")
+BASE_DIR = os.path.dirname(os.path.dirname(__file__))
+DATA_DIR = os.path.join(BASE_DIR, "data")
+os.makedirs(DATA_DIR, exist_ok=True)
+DB_PATH = os.path.join(DATA_DIR, "hitl.db")
 DATABASE_URL = f"sqlite:///{DB_PATH}"
 
 # Create engine
