@@ -35,6 +35,7 @@
                     <option value="binary">Binary Choice (Yes/No)</option>
                     <option value="multi_label">Multi-Label (Select multiple)</option>
                     <option value="multi_criteria">Multi-Criteria (Rate on multiple dimensions)</option>
+                    <option value="pairwise">Pairwise Comparison (A vs B)</option>
                 </select>
             </div>
             <div id="evalConfigSection">
@@ -170,6 +171,24 @@ function updateEvalConfigUI() {
                 <small>Format: key:Label:min:max (e.g., "accuracy:Accuracy:1:5")</small>
             </div>
         `;
+    } else if (evalType === 'pairwise') {
+        configSection.innerHTML = `
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" id="pairwiseConfidence" checked>
+                    Include confidence levels (slightly/clearly/much better)
+                </label>
+            </div>
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" id="pairwiseTie" checked>
+                    Allow "Tie" option
+                </label>
+            </div>
+            <div class="info-box">
+                <strong>CSV Format:</strong> Your dataset should have columns: <code>prompt</code>, <code>response_a</code>, <code>response_b</code>
+            </div>
+        `;
     } else {
         configSection.innerHTML = '';
     }
@@ -227,6 +246,11 @@ function buildEvalConfig() {
             });
         return {
             criteria: criteria.length > 0 ? criteria : [{ key: 'quality', label: 'Quality', min: 1, max: 5 }]
+        };
+    } else if (evalType === 'pairwise') {
+        return {
+            show_confidence: document.getElementById('pairwiseConfidence')?.checked ?? true,
+            allow_tie: document.getElementById('pairwiseTie')?.checked ?? true
         };
     }
 

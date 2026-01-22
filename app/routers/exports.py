@@ -43,6 +43,16 @@ def format_response_for_export(rating, eval_type: str, eval_config: dict = None)
             # Return empty values for each criterion
             for crit in eval_config["criteria"]:
                 result[crit["key"]] = ""
+    elif eval_type == "pairwise":
+        # For pairwise, return winner and confidence
+        if response:
+            winner = response.get("winner", "")
+            confidence = response.get("confidence", "")
+            result["winner"] = winner.upper() if winner else ""
+            result["confidence"] = confidence if confidence != "none" else ""
+        else:
+            result["winner"] = ""
+            result["confidence"] = ""
     else:
         # Default fallback
         result["value"] = rating.rating_value
@@ -116,6 +126,10 @@ async def export_session(
                         key = crit["key"]
                         label = crit.get("label", key)
                         row_data[f"{label} ({rater_name})"] = response_data.get(key, "")
+                elif eval_type == "pairwise":
+                    # For pairwise, add winner and confidence columns
+                    row_data[f"Winner ({rater_name})"] = response_data.get("winner", "")
+                    row_data[f"Confidence ({rater_name})"] = response_data.get("confidence", "")
                 else:
                     # For other types, add a single value column
                     row_data[f"Rating ({rater_name})"] = response_data.get("value", "")
@@ -126,6 +140,9 @@ async def export_session(
                     for crit in eval_config["criteria"]:
                         label = crit.get("label", crit["key"])
                         row_data[f"{label} ({rater_name})"] = ""
+                elif eval_type == "pairwise":
+                    row_data[f"Winner ({rater_name})"] = ""
+                    row_data[f"Confidence ({rater_name})"] = ""
                 else:
                     row_data[f"Rating ({rater_name})"] = ""
                 row_data[f"Comment ({rater_name})"] = ""

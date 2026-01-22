@@ -240,10 +240,37 @@ function renderEvaluationForm() {
         renderMultiLabelForm(formContainer);
     } else if (evaluationType === 'multi_criteria') {
         renderMultiCriteriaForm(formContainer);
+    } else if (evaluationType === 'pairwise') {
+        renderPairwiseForm(formContainer);
     } else {
         // Default to rating
         renderRatingForm(formContainer);
     }
+
+    // Update keyboard hints for the current evaluation type
+    updateKeyboardHints();
+}
+
+function updateKeyboardHints() {
+    const hintsEl = document.getElementById('keyboardHints');
+    if (!hintsEl) return;
+
+    let hintsText = '←/→ to navigate • Enter to save & next';
+
+    if (evaluationType === 'rating') {
+        const min = evaluationConfig.min || 1;
+        const max = evaluationConfig.max || 5;
+        hintsText = `${min}-${max} to rate • ` + hintsText;
+    } else if (evaluationType === 'binary') {
+        const options = evaluationConfig.options || [];
+        const keys = options.map(o => o.label[0].toUpperCase()).join('/');
+        hintsText = `${keys} to choose • ` + hintsText;
+    } else if (evaluationType === 'pairwise') {
+        const allowTie = evaluationConfig.allow_tie !== false;
+        hintsText = `A/B${allowTie ? '/T' : ''} to choose • ` + hintsText;
+    }
+
+    hintsEl.innerHTML = `<span>Keyboard: ${hintsText}</span>`;
 }
 
 function renderRatingForm(container) {
@@ -386,6 +413,63 @@ function renderMultiCriteriaForm(container) {
     });
 }
 
+function renderPairwiseForm(container) {
+    const showConfidence = evaluationConfig.show_confidence !== false;
+    const allowTie = evaluationConfig.allow_tie !== false;
+
+    let buttonsHtml = '';
+
+    if (showConfidence) {
+        // With confidence levels
+        buttonsHtml = `
+            <div class="pairwise-buttons">
+                <div class="pairwise-side pairwise-a">
+                    <button class="pairwise-btn" data-winner="a" data-confidence="much">A is much better</button>
+                    <button class="pairwise-btn" data-winner="a" data-confidence="clearly">A is clearly better</button>
+                    <button class="pairwise-btn" data-winner="a" data-confidence="slightly">A is slightly better</button>
+                </div>
+                ${allowTie ? '<button class="pairwise-btn pairwise-tie" data-winner="tie" data-confidence="none">Tie</button>' : ''}
+                <div class="pairwise-side pairwise-b">
+                    <button class="pairwise-btn" data-winner="b" data-confidence="slightly">B is slightly better</button>
+                    <button class="pairwise-btn" data-winner="b" data-confidence="clearly">B is clearly better</button>
+                    <button class="pairwise-btn" data-winner="b" data-confidence="much">B is much better</button>
+                </div>
+            </div>
+        `;
+    } else {
+        // Simple A/B/Tie buttons
+        buttonsHtml = `
+            <div class="pairwise-buttons pairwise-simple">
+                <button class="pairwise-btn pairwise-btn-large" data-winner="a" data-confidence="none">A is better</button>
+                ${allowTie ? '<button class="pairwise-btn pairwise-btn-large pairwise-tie" data-winner="tie" data-confidence="none">Tie</button>' : ''}
+                <button class="pairwise-btn pairwise-btn-large" data-winner="b" data-confidence="none">B is better</button>
+            </div>
+        `;
+    }
+
+    container.innerHTML = `
+        <div class="pairwise-form" id="pairwiseForm">
+            ${buttonsHtml}
+        </div>
+        <div class="pairwise-hint">
+            <span>Keyboard: A = A wins, B = B wins${allowTie ? ', T = Tie' : ''}</span>
+        </div>
+    `;
+
+    // Attach event listeners
+    document.querySelectorAll('.pairwise-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.pairwise-btn').forEach(b => b.classList.remove('selected'));
+            btn.classList.add('selected');
+            currentResponse = {
+                winner: btn.dataset.winner,
+                confidence: btn.dataset.confidence
+            };
+            updateButtons();
+        });
+    });
+}
+
 function setupStarListeners() {
     const stars = document.querySelectorAll('#starRating .star');
     stars.forEach(star => {
@@ -439,12 +523,53 @@ async function loadRows(sessionId) {
 
 function displayRow(row) {
     const content = row.content;
-    const contentHtml = Object.entries(content).map(([key, value]) => `
-        <div class="content-field">
-            <div class="field-label">${escapeHtml(key)}</div>
-            <div class="field-value">${escapeHtml(value)}</div>
-        </div>
-    `).join('');
+    let contentHtml;
+
+    if (evaluationType === 'pairwise') {
+        // For pairwise, show side-by-side comparison
+        const prompt = content.prompt || '';
+        const responseA = content.response_a || content.Response_A || content.a || '';
+        const responseB = content.response_b || content.Response_B || content.b || '';
+
+        // Show any other fields that aren't the main comparison fields
+        const otherFields = Object.entries(content)
+            .filter(([key]) => !['prompt', 'response_a', 'response_b', 'Response_A', 'Response_B', 'a', 'b'].includes(key))
+            .map(([key, value]) => `
+                <div class="content-field">
+                    <div class="field-label">${escapeHtml(key)}</div>
+                    <div class="field-value">${escapeHtml(value)}</div>
+                </div>
+            `).join('');
+
+        contentHtml = `
+            ${prompt ? `
+                <div class="content-field pairwise-prompt">
+                    <div class="field-label">Prompt</div>
+                    <div class="field-value">${escapeHtml(prompt)}</div>
+                </div>
+            ` : ''}
+            ${otherFields}
+            <div class="pairwise-comparison">
+                <div class="pairwise-response pairwise-response-a">
+                    <div class="pairwise-label">Response A</div>
+                    <div class="pairwise-content">${escapeHtml(responseA)}</div>
+                </div>
+                <div class="pairwise-divider"></div>
+                <div class="pairwise-response pairwise-response-b">
+                    <div class="pairwise-label">Response B</div>
+                    <div class="pairwise-content">${escapeHtml(responseB)}</div>
+                </div>
+            </div>
+        `;
+    } else {
+        // Standard display for other evaluation types
+        contentHtml = Object.entries(content).map(([key, value]) => `
+            <div class="content-field">
+                <div class="field-label">${escapeHtml(key)}</div>
+                <div class="field-value">${escapeHtml(value)}</div>
+            </div>
+        `).join('');
+    }
 
     document.getElementById('rowContent').innerHTML = contentHtml;
     document.getElementById('rowNumber').textContent = `Row #${row.row_index}`;
@@ -492,6 +617,20 @@ function displayRow(row) {
                     s.classList.toggle('active', parseInt(s.dataset.value) <= value);
                 });
             });
+        } else if (evaluationType === 'pairwise') {
+            const winner = currentResponse?.winner || '';
+            const confidence = currentResponse?.confidence || '';
+            let statusText = '';
+            if (winner === 'a') statusText = 'A wins';
+            else if (winner === 'b') statusText = 'B wins';
+            else if (winner === 'tie') statusText = 'Tie';
+            if (confidence && confidence !== 'none') statusText += ` (${confidence})`;
+            statusEl.textContent = `Your choice: ${statusText}`;
+            // Restore pairwise selection
+            document.querySelectorAll('.pairwise-btn').forEach(btn => {
+                btn.classList.toggle('selected',
+                    btn.dataset.winner === winner && btn.dataset.confidence === confidence);
+            });
         } else {
             statusEl.textContent = 'Rated';
         }
@@ -509,6 +648,8 @@ function displayRow(row) {
             document.querySelectorAll('#multiLabelOptions input[type="checkbox"]').forEach(cb => cb.checked = false);
         } else if (evaluationType === 'multi_criteria') {
             document.querySelectorAll('.criteria-star').forEach(s => s.classList.remove('active'));
+        } else if (evaluationType === 'pairwise') {
+            document.querySelectorAll('.pairwise-btn').forEach(btn => btn.classList.remove('selected'));
         }
     }
 
@@ -556,6 +697,14 @@ function displayOtherRatings(ratings, myRating) {
                 return `${crit?.label || key}: ${value}`;
             });
             scoreHtml = `<span class="rater-criteria">${escapeHtml(items.join(' | '))}</span>`;
+        } else if (evaluationType === 'pairwise') {
+            const winner = rating.response?.winner || '';
+            const confidence = rating.response?.confidence || '';
+            let winnerText = winner === 'a' ? 'A' : winner === 'b' ? 'B' : winner === 'tie' ? 'Tie' : '-';
+            if (confidence && confidence !== 'none') {
+                winnerText += ` (${confidence})`;
+            }
+            scoreHtml = `<span class="rater-pairwise">${escapeHtml(winnerText)}</span>`;
         } else {
             scoreHtml = `<span class="rater-score">${rating.rating_value || '-'}</span>`;
         }
@@ -593,6 +742,8 @@ function updateButtons() {
         const responses = currentResponse?.criteria || {};
         // Require all criteria to be rated
         hasValidResponse = criteria.length > 0 && Object.keys(responses).length === criteria.length;
+    } else if (evaluationType === 'pairwise') {
+        hasValidResponse = currentResponse && currentResponse.winner;
     } else {
         hasValidResponse = selectedRating > 0 || currentResponse;
     }
@@ -734,6 +885,25 @@ function handleKeyboard(e) {
             currentResponse = { value: matchedOption.value };
             document.querySelectorAll('.binary-btn').forEach(btn => {
                 btn.classList.toggle('selected', btn.dataset.value === matchedOption.value);
+            });
+            updateButtons();
+        }
+    }
+
+    // Handle A/B/T keys for pairwise type
+    if (evaluationType === 'pairwise') {
+        const key = e.key.toLowerCase();
+        const allowTie = evaluationConfig.allow_tie !== false;
+
+        if (key === 'a' || key === 'b' || (key === 't' && allowTie)) {
+            e.preventDefault();
+            const winner = key === 't' ? 'tie' : key;
+            currentResponse = { winner: winner, confidence: 'none' };
+
+            // Update button states
+            document.querySelectorAll('.pairwise-btn').forEach(btn => {
+                const isSelected = btn.dataset.winner === winner && btn.dataset.confidence === 'none';
+                btn.classList.toggle('selected', isSelected);
             });
             updateButtons();
         }

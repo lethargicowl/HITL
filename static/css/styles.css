@@ -1191,6 +1191,195 @@ header h1 {
     color: #ffc107;
 }
 
+/* Pairwise Comparison */
+.pairwise-prompt {
+    margin-bottom: 16px;
+    padding: 12px 16px;
+    background: #e3f2fd;
+    border-radius: 8px;
+    border-left: 4px solid #2196f3;
+}
+
+.pairwise-prompt strong {
+    color: #1565c0;
+    display: block;
+    margin-bottom: 8px;
+    font-size: 0.85rem;
+}
+
+.pairwise-comparison {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    gap: 16px;
+    margin-bottom: 16px;
+}
+
+.pairwise-response {
+    padding: 16px;
+    background: #f5f5f5;
+    border-radius: 8px;
+    border: 2px solid transparent;
+}
+
+.pairwise-response-a {
+    border-color: #e3f2fd;
+}
+
+.pairwise-response-b {
+    border-color: #fce4ec;
+}
+
+.pairwise-response strong {
+    display: block;
+    margin-bottom: 12px;
+    font-size: 1rem;
+    text-align: center;
+}
+
+.pairwise-response-a strong {
+    color: #1565c0;
+}
+
+.pairwise-response-b strong {
+    color: #c2185b;
+}
+
+.pairwise-response pre {
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    margin: 0;
+    font-family: inherit;
+    font-size: 0.95rem;
+    line-height: 1.5;
+}
+
+.pairwise-divider {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    color: #999;
+    font-size: 1.2rem;
+}
+
+.pairwise-divider::before {
+    content: "VS";
+    padding: 8px 4px;
+    background: #fff;
+    border-radius: 4px;
+    border: 1px solid #ddd;
+}
+
+/* Pairwise Buttons */
+.pairwise-buttons {
+    display: flex;
+    justify-content: center;
+    align-items: stretch;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+}
+
+.pairwise-side {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.pairwise-side.pairwise-a {
+    align-items: flex-end;
+}
+
+.pairwise-side.pairwise-b {
+    align-items: flex-start;
+}
+
+.pairwise-btn {
+    padding: 10px 16px;
+    border: 2px solid #ddd;
+    border-radius: 6px;
+    background: #fff;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: all 0.2s;
+    min-width: 140px;
+}
+
+.pairwise-btn:hover {
+    border-color: #666;
+    background: #f5f5f5;
+}
+
+.pairwise-btn.selected {
+    border-color: #4caf50;
+    background: #e8f5e9;
+    color: #2e7d32;
+    font-weight: 500;
+}
+
+.pairwise-side.pairwise-a .pairwise-btn {
+    border-color: #bbdefb;
+}
+
+.pairwise-side.pairwise-a .pairwise-btn:hover {
+    border-color: #1976d2;
+    background: #e3f2fd;
+}
+
+.pairwise-side.pairwise-a .pairwise-btn.selected {
+    border-color: #1976d2;
+    background: #1976d2;
+    color: white;
+}
+
+.pairwise-side.pairwise-b .pairwise-btn {
+    border-color: #f8bbd9;
+}
+
+.pairwise-side.pairwise-b .pairwise-btn:hover {
+    border-color: #c2185b;
+    background: #fce4ec;
+}
+
+.pairwise-side.pairwise-b .pairwise-btn.selected {
+    border-color: #c2185b;
+    background: #c2185b;
+    color: white;
+}
+
+.pairwise-btn.pairwise-tie {
+    border-color: #e0e0e0;
+    align-self: center;
+}
+
+.pairwise-btn.pairwise-tie:hover {
+    border-color: #9e9e9e;
+    background: #f5f5f5;
+}
+
+.pairwise-btn.pairwise-tie.selected {
+    border-color: #757575;
+    background: #757575;
+    color: white;
+}
+
+/* Simple pairwise (no confidence) */
+.pairwise-simple {
+    gap: 16px;
+}
+
+.pairwise-btn-large {
+    padding: 16px 32px;
+    font-size: 1.1rem;
+    min-width: 160px;
+}
+
+/* Rater pairwise display */
+.rater-pairwise {
+    font-weight: 500;
+    color: #333;
+}
+
 /* Instructions Section */
 .instructions-section {
     background: #fff9e6;
