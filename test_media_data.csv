@@ -1,0 +1,6 @@
+prompt,image,response_a,response_b
+"Describe this landscape photo","https://picsum.photos/seed/landscape/600/400","A beautiful mountain landscape with snow-capped peaks and a clear blue sky.","Mountains with trees in the foreground."
+"What emotions does this image evoke?","https://picsum.photos/seed/sunset/600/400","The warm colors create a sense of peace and tranquility.","It looks like a nice sunset."
+"Rate the quality of this nature photo","https://picsum.photos/seed/forest/600/400","A dense forest with vibrant green foliage and dappled sunlight.","Trees and plants."
+"What is happening in this scene?","https://picsum.photos/seed/city/600/400","A bustling cityscape with modern architecture and busy streets.","Buildings in a city."
+"Describe the mood of this image","https://picsum.photos/seed/ocean/600/400","A serene ocean view with gentle waves lapping at a sandy beach.","Water and sand."

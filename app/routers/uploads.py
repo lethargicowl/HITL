@@ -92,6 +92,24 @@ async def get_session(
         if not assignment:
             raise HTTPException(status_code=403, detail="Access denied")
 
+    # Build questions list if multi-question mode
+    questions = []
+    if project.use_multi_questions and project.questions:
+        questions = [
+            {
+                "id": q.id,
+                "key": q.key,
+                "label": q.label,
+                "description": q.description,
+                "question_type": q.question_type,
+                "config": json.loads(q.config) if q.config else {},
+                "required": q.required,
+                "conditional": json.loads(q.conditional) if q.conditional else None,
+                "order": q.order
+            }
+            for q in sorted(project.questions, key=lambda x: x.order)
+        ]
+
     return SessionDetailResponse(
         id=session.id,
         name=session.name,
@@ -103,7 +121,9 @@ async def get_session(
             name=project.name,
             evaluation_type=project.evaluation_type or "rating",
             evaluation_config=json.loads(project.evaluation_config) if project.evaluation_config else None,
-            instructions=project.instructions
+            instructions=project.instructions,
+            use_multi_questions=project.use_multi_questions or False,
+            questions=questions
         ),
         created_at=session.created_at,
         row_count=len(session.rows),

@@ -17,10 +17,25 @@
     <section class="section-card">
         <div class="section-header">
             <h2>Evaluation Settings</h2>
-            <button class="btn-secondary" onclick="showEvalSettingsModal()">Edit Settings</button>
+            <div class="header-actions">
+                <button class="btn-secondary" onclick="showEvalSettingsModal()" id="singleQuestionBtn">Single Question Mode</button>
+                <button class="btn-primary" onclick="showAddQuestionModal()" id="addQuestionBtn">+ Add Question</button>
+            </div>
+        </div>
+        <div class="eval-mode-toggle" id="evalModeToggle">
+            <label class="toggle-switch">
+                <input type="checkbox" id="multiQuestionToggle" onchange="toggleMultiQuestionMode()">
+                <span class="toggle-slider"></span>
+            </label>
+            <span class="toggle-label">Multi-Question Mode</span>
+            <span class="toggle-hint" id="modeHint">(Currently using single question)</span>
         </div>
         <div class="eval-settings" id="evalSettings">
             <p class="loading">Loading settings...</p>
+        </div>
+        <!-- Questions List (for multi-question mode) -->
+        <div class="questions-list" id="questionsList" style="display: none;">
+            <p class="loading">Loading questions...</p>
         </div>
     </section>
 
@@ -98,11 +113,11 @@
     </div>
 </div>
 
-<!-- Evaluation Settings Modal -->
+<!-- Evaluation Settings Modal (Single Question Mode) -->
 <div class="modal" id="evalSettingsModal" style="display: none;">
     <div class="modal-content modal-large">
         <div class="modal-header">
-            <h2>Evaluation Settings</h2>
+            <h2>Single Question Settings</h2>
             <button class="modal-close" onclick="hideEvalSettingsModal()">&times;</button>
         </div>
         <form id="evalSettingsForm">
@@ -114,7 +129,6 @@
                     <option value="multi_label">Multi-Label (Select multiple)</option>
                     <option value="multi_criteria">Multi-Criteria (Rate on multiple dimensions)</option>
                     <option value="pairwise">Pairwise Comparison (A vs B)</option>
-                    <option value="multi_criteria">Multi-Criteria (Rate on multiple dimensions)</option>
                 </select>
             </div>
             <div id="editEvalConfigSection">
@@ -130,6 +144,97 @@
                 <button type="submit" class="btn-primary">Save Settings</button>
             </div>
         </form>
+    </div>
+</div>
+
+<!-- Add Question Modal (Multi-Question Mode) -->
+<div class="modal" id="addQuestionModal" style="display: none;">
+    <div class="modal-content modal-large">
+        <div class="modal-header">
+            <h2 id="questionModalTitle">Add Evaluation Question</h2>
+            <button class="modal-close" onclick="hideAddQuestionModal()">&times;</button>
+        </div>
+        <form id="addQuestionForm">
+            <input type="hidden" id="editingQuestionId" value="">
+
+            <div class="form-row">
+                <div class="form-group half">
+                    <label for="questionKey">Question Key *</label>
+                    <input type="text" id="questionKey" placeholder="e.g., quality, safety, accuracy" pattern="^[a-z][a-z0-9_]*$" required>
+                    <small>Lowercase, no spaces (used in exports)</small>
+                </div>
+                <div class="form-group half">
+                    <label for="questionLabel">Display Label *</label>
+                    <input type="text" id="questionLabel" placeholder="e.g., Overall Quality" required>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="questionDescription">Description (optional)</label>
+                <input type="text" id="questionDescription" placeholder="Help text shown to raters">
+            </div>
+
+            <div class="form-group">
+                <label for="questionType">Question Type *</label>
+                <select id="questionType" onchange="updateQuestionConfigUI()" required>
+                    <option value="rating">Rating Scale (1-5 stars)</option>
+                    <option value="binary">Binary Choice (Yes/No)</option>
+                    <option value="multi_label">Multi-Label (Select multiple)</option>
+                    <option value="text">Free Text Response</option>
+                </select>
+            </div>
+
+            <div id="questionConfigSection">
+                <!-- Dynamic config UI -->
+            </div>
+
+            <div class="form-group">
+                <label class="checkbox-label">
+                    <input type="checkbox" id="questionRequired" checked>
+                    Required question
+                </label>
+            </div>
+
+            <div class="form-error" id="addQuestionError" style="display: none;"></div>
+            <div class="modal-actions">
+                <button type="button" class="btn-secondary" onclick="hideAddQuestionModal()">Cancel</button>
+                <button type="submit" class="btn-primary" id="saveQuestionBtn">Add Question</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Quick Add Questions Modal -->
+<div class="modal" id="quickAddModal" style="display: none;">
+    <div class="modal-content modal-large">
+        <div class="modal-header">
+            <h2>Quick Add Questions</h2>
+            <button class="modal-close" onclick="hideQuickAddModal()">&times;</button>
+        </div>
+        <div class="quick-add-templates">
+            <p>Choose a template to quickly add common question sets:</p>
+            <div class="template-grid">
+                <button class="template-btn" onclick="addTemplateQuestions('quality')">
+                    <strong>Quality Assessment</strong>
+                    <span>Rating: Quality, Accuracy, Helpfulness</span>
+                </button>
+                <button class="template-btn" onclick="addTemplateQuestions('safety')">
+                    <strong>Safety Review</strong>
+                    <span>Binary: Safe?, Rating: Severity</span>
+                </button>
+                <button class="template-btn" onclick="addTemplateQuestions('content')">
+                    <strong>Content Review</strong>
+                    <span>Multi-label: Categories, Rating: Quality</span>
+                </button>
+                <button class="template-btn" onclick="addTemplateQuestions('feedback')">
+                    <strong>Feedback Collection</strong>
+                    <span>Rating + Text comments</span>
+                </button>
+            </div>
+        </div>
+        <div class="modal-actions">
+            <button type="button" class="btn-secondary" onclick="hideQuickAddModal()">Cancel</button>
+        </div>
     </div>
 </div>
 {% endblock %}
@@ -666,5 +771,426 @@ document.querySelectorAll('.modal').forEach(modal => {
         }
     });
 });
+
+// ==================== Multi-Question Mode ====================
+
+function updateEvalModeUI() {
+    const isMultiQuestion = projectData.use_multi_questions || false;
+    const toggle = document.getElementById('multiQuestionToggle');
+    const modeHint = document.getElementById('modeHint');
+    const singleBtn = document.getElementById('singleQuestionBtn');
+    const addBtn = document.getElementById('addQuestionBtn');
+    const evalSettings = document.getElementById('evalSettings');
+    const questionsList = document.getElementById('questionsList');
+
+    toggle.checked = isMultiQuestion;
+
+    if (isMultiQuestion) {
+        modeHint.textContent = '(Using multiple questions)';
+        singleBtn.style.display = 'none';
+        addBtn.style.display = 'inline-block';
+        evalSettings.style.display = 'none';
+        questionsList.style.display = 'block';
+        displayQuestionsList();
+    } else {
+        modeHint.textContent = '(Using single question)';
+        singleBtn.style.display = 'inline-block';
+        addBtn.style.display = 'none';
+        evalSettings.style.display = 'block';
+        questionsList.style.display = 'none';
+    }
+}
+
+async function toggleMultiQuestionMode() {
+    const isMultiQuestion = document.getElementById('multiQuestionToggle').checked;
+
+    try {
+        const response = await fetch(`/api/projects/${PROJECT_ID}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ use_multi_questions: isMultiQuestion }),
+            credentials: 'same-origin'
+        });
+
+        if (!response.ok) throw new Error('Failed to update mode');
+
+        projectData.use_multi_questions = isMultiQuestion;
+        updateEvalModeUI();
+
+        // If switching to multi-question and no questions exist, prompt to add
+        if (isMultiQuestion && (!projectData.questions || projectData.questions.length === 0)) {
+            showQuickAddModal();
+        }
+    } catch (error) {
+        console.error('Failed to toggle mode:', error);
+        document.getElementById('multiQuestionToggle').checked = !isMultiQuestion;
+    }
+}
+
+function displayQuestionsList() {
+    const container = document.getElementById('questionsList');
+    const questions = projectData.questions || [];
+
+    if (questions.length === 0) {
+        container.innerHTML = `
+            <div class="empty-questions">
+                <p>No questions configured yet.</p>
+                <button class="btn-primary" onclick="showAddQuestionModal()">+ Add First Question</button>
+                <button class="btn-secondary" onclick="showQuickAddModal()">Use Template</button>
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = `
+        <div class="questions-header">
+            <span>${questions.length} question(s) configured</span>
+            <button class="btn-secondary btn-small" onclick="showQuickAddModal()">+ Add Template</button>
+        </div>
+        ${questions.map((q, idx) => `
+            <div class="question-item" data-question-id="${q.id}">
+                <div class="question-drag-handle">☰</div>
+                <div class="question-info">
+                    <div class="question-label">
+                        <strong>${escapeHtml(q.label)}</strong>
+                        ${q.required ? '<span class="required-badge">Required</span>' : '<span class="optional-badge">Optional</span>'}
+                    </div>
+                    <div class="question-meta">
+                        <span class="question-type-badge">${getQuestionTypeName(q.question_type)}</span>
+                        <span class="question-key">key: ${escapeHtml(q.key)}</span>
+                        ${q.description ? `<span class="question-desc">${escapeHtml(q.description)}</span>` : ''}
+                    </div>
+                </div>
+                <div class="question-actions">
+                    <button class="btn-icon" onclick="editQuestion('${q.id}')" title="Edit">✏️</button>
+                    <button class="btn-icon btn-icon-danger" onclick="deleteQuestion('${q.id}')" title="Delete">🗑️</button>
+                </div>
+            </div>
+        `).join('')}
+        <div class="questions-footer">
+            <button class="btn-primary" onclick="showAddQuestionModal()">+ Add Another Question</button>
+        </div>
+    `;
+}
+
+function getQuestionTypeName(type) {
+    const names = {
+        'rating': 'Rating',
+        'binary': 'Binary',
+        'multi_label': 'Multi-Label',
+        'text': 'Text',
+        'multi_criteria': 'Multi-Criteria',
+        'pairwise': 'Pairwise'
+    };
+    return names[type] || type;
+}
+
+// Add Question Modal
+function showAddQuestionModal(questionId = null) {
+    document.getElementById('addQuestionModal').style.display = 'flex';
+    document.getElementById('addQuestionError').style.display = 'none';
+
+    if (questionId) {
+        // Edit mode
+        const question = projectData.questions.find(q => q.id === questionId);
+        if (question) {
+            document.getElementById('questionModalTitle').textContent = 'Edit Question';
+            document.getElementById('editingQuestionId').value = questionId;
+            document.getElementById('questionKey').value = question.key;
+            document.getElementById('questionKey').disabled = true; // Can't change key
+            document.getElementById('questionLabel').value = question.label;
+            document.getElementById('questionDescription').value = question.description || '';
+            document.getElementById('questionType').value = question.question_type;
+            document.getElementById('questionRequired').checked = question.required;
+            document.getElementById('saveQuestionBtn').textContent = 'Save Changes';
+            updateQuestionConfigUI(question.config);
+        }
+    } else {
+        // Add mode
+        document.getElementById('questionModalTitle').textContent = 'Add Evaluation Question';
+        document.getElementById('editingQuestionId').value = '';
+        document.getElementById('questionKey').value = '';
+        document.getElementById('questionKey').disabled = false;
+        document.getElementById('questionLabel').value = '';
+        document.getElementById('questionDescription').value = '';
+        document.getElementById('questionType').value = 'rating';
+        document.getElementById('questionRequired').checked = true;
+        document.getElementById('saveQuestionBtn').textContent = 'Add Question';
+        updateQuestionConfigUI();
+    }
+}
+
+function hideAddQuestionModal() {
+    document.getElementById('addQuestionModal').style.display = 'none';
+}
+
+function editQuestion(questionId) {
+    showAddQuestionModal(questionId);
+}
+
+async function deleteQuestion(questionId) {
+    if (!confirm('Delete this question? This cannot be undone.')) return;
+
+    try {
+        const response = await fetch(`/api/projects/${PROJECT_ID}/questions/${questionId}`, {
+            method: 'DELETE',
+            credentials: 'same-origin'
+        });
+
+        if (!response.ok) throw new Error('Failed to delete question');
+
+        // Remove from local data and refresh
+        projectData.questions = projectData.questions.filter(q => q.id !== questionId);
+        displayQuestionsList();
+
+        // If no questions left, might want to switch back to single mode
+        if (projectData.questions.length === 0) {
+            projectData.use_multi_questions = false;
+            updateEvalModeUI();
+        }
+    } catch (error) {
+        alert('Failed to delete question: ' + error.message);
+    }
+}
+
+function updateQuestionConfigUI(existingConfig = null) {
+    const questionType = document.getElementById('questionType').value;
+    const configSection = document.getElementById('questionConfigSection');
+    const config = existingConfig || {};
+
+    if (questionType === 'rating') {
+        const min = config.min || 1;
+        const max = config.max || 5;
+        configSection.innerHTML = `
+            <div class="form-row">
+                <div class="form-group half">
+                    <label for="qRatingMin">Min Value</label>
+                    <input type="number" id="qRatingMin" value="${min}" min="1" max="10">
+                </div>
+                <div class="form-group half">
+                    <label for="qRatingMax">Max Value</label>
+                    <input type="number" id="qRatingMax" value="${max}" min="1" max="10">
+                </div>
+            </div>
+        `;
+    } else if (questionType === 'binary') {
+        const options = config.options || [{ value: 'yes', label: 'Yes' }, { value: 'no', label: 'No' }];
+        configSection.innerHTML = `
+            <div class="form-group">
+                <label>Binary Options</label>
+                <div class="binary-options">
+                    <div class="form-row">
+                        <input type="text" id="qBinaryOpt1Value" value="${escapeHtml(options[0]?.value || 'yes')}" placeholder="Value">
+                        <input type="text" id="qBinaryOpt1Label" value="${escapeHtml(options[0]?.label || 'Yes')}" placeholder="Label">
+                    </div>
+                    <div class="form-row">
+                        <input type="text" id="qBinaryOpt2Value" value="${escapeHtml(options[1]?.value || 'no')}" placeholder="Value">
+                        <input type="text" id="qBinaryOpt2Label" value="${escapeHtml(options[1]?.label || 'No')}" placeholder="Label">
+                    </div>
+                </div>
+            </div>
+        `;
+    } else if (questionType === 'multi_label') {
+        const options = config.options || [];
+        const text = options.map(o => `${o.value}:${o.label}`).join('\n');
+        configSection.innerHTML = `
+            <div class="form-group">
+                <label>Labels (one per line)</label>
+                <textarea id="qMultiLabelOptions" rows="4" placeholder="accurate:Factually Accurate&#10;helpful:Helpful&#10;safe:Safe">${escapeHtml(text)}</textarea>
+                <small>Format: value:Label (e.g., "accurate:Factually Accurate")</small>
+            </div>
+        `;
+    } else if (questionType === 'text') {
+        const placeholder = config.placeholder || '';
+        const maxLength = config.max_length || '';
+        configSection.innerHTML = `
+            <div class="form-group">
+                <label for="qTextPlaceholder">Placeholder text</label>
+                <input type="text" id="qTextPlaceholder" value="${escapeHtml(placeholder)}" placeholder="Enter your feedback...">
+            </div>
+            <div class="form-group">
+                <label for="qTextMaxLength">Max length (optional)</label>
+                <input type="number" id="qTextMaxLength" value="${maxLength}" placeholder="No limit">
+            </div>
+        `;
+    } else {
+        configSection.innerHTML = '';
+    }
+}
+
+function buildQuestionConfig() {
+    const questionType = document.getElementById('questionType').value;
+
+    if (questionType === 'rating') {
+        return {
+            min: parseInt(document.getElementById('qRatingMin')?.value || '1'),
+            max: parseInt(document.getElementById('qRatingMax')?.value || '5'),
+            labels: {}
+        };
+    } else if (questionType === 'binary') {
+        return {
+            options: [
+                { value: document.getElementById('qBinaryOpt1Value')?.value || 'yes', label: document.getElementById('qBinaryOpt1Label')?.value || 'Yes' },
+                { value: document.getElementById('qBinaryOpt2Value')?.value || 'no', label: document.getElementById('qBinaryOpt2Label')?.value || 'No' }
+            ]
+        };
+    } else if (questionType === 'multi_label') {
+        const text = document.getElementById('qMultiLabelOptions')?.value || '';
+        const options = text.split('\n').filter(line => line.trim()).map(line => {
+            const [value, label] = line.split(':').map(s => s.trim());
+            return { value: value || label, label: label || value };
+        });
+        return { options: options.length > 0 ? options : [{ value: 'option1', label: 'Option 1' }] };
+    } else if (questionType === 'text') {
+        const config = {};
+        const placeholder = document.getElementById('qTextPlaceholder')?.value;
+        const maxLength = document.getElementById('qTextMaxLength')?.value;
+        if (placeholder) config.placeholder = placeholder;
+        if (maxLength) config.max_length = parseInt(maxLength);
+        return config;
+    }
+
+    return {};
+}
+
+document.getElementById('addQuestionForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const errorEl = document.getElementById('addQuestionError');
+    errorEl.style.display = 'none';
+
+    const editingId = document.getElementById('editingQuestionId').value;
+    const isEdit = !!editingId;
+
+    const questionData = {
+        key: document.getElementById('questionKey').value.trim().toLowerCase(),
+        label: document.getElementById('questionLabel').value.trim(),
+        description: document.getElementById('questionDescription').value.trim() || null,
+        question_type: document.getElementById('questionType').value,
+        config: buildQuestionConfig(),
+        required: document.getElementById('questionRequired').checked
+    };
+
+    // Validate
+    if (!questionData.key.match(/^[a-z][a-z0-9_]*$/)) {
+        errorEl.textContent = 'Key must start with a letter and contain only lowercase letters, numbers, and underscores';
+        errorEl.style.display = 'block';
+        return;
+    }
+
+    try {
+        let response;
+        if (isEdit) {
+            response = await fetch(`/api/projects/${PROJECT_ID}/questions/${editingId}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(questionData),
+                credentials: 'same-origin'
+            });
+        } else {
+            response = await fetch(`/api/projects/${PROJECT_ID}/questions`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(questionData),
+                credentials: 'same-origin'
+            });
+        }
+
+        if (!response.ok) {
+            const data = await response.json();
+            throw new Error(data.detail || 'Failed to save question');
+        }
+
+        const savedQuestion = await response.json();
+
+        if (isEdit) {
+            const idx = projectData.questions.findIndex(q => q.id === editingId);
+            if (idx >= 0) projectData.questions[idx] = savedQuestion;
+        } else {
+            if (!projectData.questions) projectData.questions = [];
+            projectData.questions.push(savedQuestion);
+        }
+
+        // Ensure multi-question mode is on
+        projectData.use_multi_questions = true;
+
+        hideAddQuestionModal();
+        updateEvalModeUI();
+
+    } catch (error) {
+        errorEl.textContent = error.message;
+        errorEl.style.display = 'block';
+    }
+});
+
+// Quick Add Templates
+function showQuickAddModal() {
+    document.getElementById('quickAddModal').style.display = 'flex';
+}
+
+function hideQuickAddModal() {
+    document.getElementById('quickAddModal').style.display = 'none';
+}
+
+async function addTemplateQuestions(templateName) {
+    let questions = [];
+
+    if (templateName === 'quality') {
+        questions = [
+            { key: 'quality', label: 'Overall Quality', question_type: 'rating', config: { min: 1, max: 5 }, required: true },
+            { key: 'accuracy', label: 'Factual Accuracy', question_type: 'rating', config: { min: 1, max: 5 }, required: true },
+            { key: 'helpfulness', label: 'Helpfulness', question_type: 'rating', config: { min: 1, max: 5 }, required: true }
+        ];
+    } else if (templateName === 'safety') {
+        questions = [
+            { key: 'is_safe', label: 'Is this content safe?', question_type: 'binary', config: { options: [{ value: 'yes', label: 'Yes, Safe' }, { value: 'no', label: 'No, Unsafe' }] }, required: true },
+            { key: 'severity', label: 'If unsafe, how severe?', question_type: 'rating', config: { min: 1, max: 5, labels: { 1: 'Minor', 5: 'Critical' } }, required: false }
+        ];
+    } else if (templateName === 'content') {
+        questions = [
+            { key: 'categories', label: 'Content Categories', question_type: 'multi_label', config: { options: [{ value: 'educational', label: 'Educational' }, { value: 'entertainment', label: 'Entertainment' }, { value: 'informative', label: 'Informative' }, { value: 'promotional', label: 'Promotional' }] }, required: true },
+            { key: 'quality', label: 'Content Quality', question_type: 'rating', config: { min: 1, max: 5 }, required: true }
+        ];
+    } else if (templateName === 'feedback') {
+        questions = [
+            { key: 'rating', label: 'Overall Rating', question_type: 'rating', config: { min: 1, max: 5 }, required: true },
+            { key: 'feedback', label: 'Additional Feedback', question_type: 'text', config: { placeholder: 'Share your thoughts...' }, required: false }
+        ];
+    }
+
+    if (questions.length === 0) return;
+
+    try {
+        const response = await fetch(`/api/projects/${PROJECT_ID}/questions/bulk`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(questions),
+            credentials: 'same-origin'
+        });
+
+        if (!response.ok) {
+            const data = await response.json();
+            throw new Error(data.detail || 'Failed to add questions');
+        }
+
+        const savedQuestions = await response.json();
+
+        if (!projectData.questions) projectData.questions = [];
+        projectData.questions.push(...savedQuestions);
+        projectData.use_multi_questions = true;
+
+        hideQuickAddModal();
+        updateEvalModeUI();
+
+    } catch (error) {
+        alert('Failed to add template: ' + error.message);
+    }
+}
+
+// Override displayEvalSettings to also handle mode UI
+const originalDisplayEvalSettings = displayEvalSettings;
+displayEvalSettings = function() {
+    originalDisplayEvalSettings();
+    updateEvalModeUI();
+};
 </script>
 {% endblock %}

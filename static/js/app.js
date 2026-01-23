@@ -147,6 +147,11 @@ let evaluationType = 'rating';
 let evaluationConfig = null;
 let currentResponse = null;  // Stores the current evaluation response
 
+// Multi-question mode
+let useMultiQuestions = false;
+let projectQuestions = [];  // Array of question definitions
+let questionResponses = {};  // Object mapping question key to response
+
 function initRating(sessionId) {
     // Load session data (this will also render the evaluation form)
     loadSession(sessionId);
@@ -195,6 +200,11 @@ async function loadSession(sessionId) {
         evaluationType = currentSession.project.evaluation_type || 'rating';
         evaluationConfig = currentSession.project.evaluation_config || {};
 
+        // Check for multi-question mode
+        useMultiQuestions = currentSession.project.use_multi_questions || false;
+        projectQuestions = currentSession.project.questions || [];
+        questionResponses = {};
+
         // Display instructions if available
         if (currentSession.project.instructions) {
             const instructionsSection = document.getElementById('instructionsSection');
@@ -231,6 +241,13 @@ function toggleInstructions() {
 function renderEvaluationForm() {
     const formContainer = document.getElementById('evaluationForm');
     if (!formContainer) return;
+
+    // Check for multi-question mode
+    if (useMultiQuestions && projectQuestions.length > 0) {
+        renderMultiQuestionForm(formContainer);
+        updateKeyboardHints();
+        return;
+    }
 
     if (evaluationType === 'rating') {
         renderRatingForm(formContainer);
@@ -470,6 +487,289 @@ function renderPairwiseForm(container) {
     });
 }
 
+function renderMultiQuestionForm(container) {
+    // Reset responses
+    questionResponses = {};
+
+    let questionsHtml = projectQuestions.map((q, index) => {
+        const conditionalAttr = q.conditional ? `data-conditional='${JSON.stringify(q.conditional)}'` : '';
+        const requiredLabel = q.required ? '<span class="required-indicator">*</span>' : '';
+
+        return `
+            <div class="question-block" data-question-key="${q.key}" data-question-type="${q.question_type}" ${conditionalAttr}>
+                <div class="question-header">
+                    <h4>${escapeHtml(q.label)} ${requiredLabel}</h4>
+                    ${q.description ? `<p class="question-description">${escapeHtml(q.description)}</p>` : ''}
+                </div>
+                <div class="question-form" id="question-form-${q.key}">
+                    ${renderQuestionInput(q)}
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    container.innerHTML = `
+        <div class="multi-question-form" id="multiQuestionForm">
+            ${questionsHtml}
+        </div>
+        <div class="question-progress" id="questionProgress">
+            <span>0 / ${projectQuestions.filter(q => q.required).length} required questions answered</span>
+        </div>
+    `;
+
+    // Setup event listeners for each question
+    projectQuestions.forEach(q => {
+        setupQuestionListeners(q);
+    });
+
+    // Initial conditional visibility check
+    updateConditionalVisibility();
+}
+
+function renderQuestionInput(question) {
+    const q = question;
+    const config = q.config || {};
+
+    if (q.question_type === 'rating') {
+        const min = config.min || 1;
+        const max = config.max || 5;
+        const labels = config.labels || {};
+
+        let starsHtml = '';
+        for (let i = min; i <= max; i++) {
+            starsHtml += `<button class="star mq-star" data-question="${q.key}" data-value="${i}">★</button>`;
+        }
+
+        return `
+            <div class="mq-rating">
+                <div class="mq-stars">${starsHtml}</div>
+                <div class="mq-labels">
+                    <span>${escapeHtml(labels[min] || 'Poor')}</span>
+                    <span>${escapeHtml(labels[max] || 'Excellent')}</span>
+                </div>
+            </div>
+        `;
+    } else if (q.question_type === 'binary') {
+        const options = config.options || [
+            { value: 'yes', label: 'Yes' },
+            { value: 'no', label: 'No' }
+        ];
+
+        const buttonsHtml = options.map(opt => `
+            <button class="mq-btn mq-binary-btn" data-question="${q.key}" data-value="${escapeHtml(opt.value)}">${escapeHtml(opt.label)}</button>
+        `).join('');
+
+        return `<div class="mq-binary">${buttonsHtml}</div>`;
+    } else if (q.question_type === 'multi_label') {
+        const options = config.options || [];
+
+        const checkboxesHtml = options.map(opt => `
+            <label class="mq-checkbox-label">
+                <input type="checkbox" class="mq-checkbox" data-question="${q.key}" data-value="${escapeHtml(opt.value)}">
+                <span>${escapeHtml(opt.label)}</span>
+            </label>
+        `).join('');
+
+        return `<div class="mq-multi-label">${checkboxesHtml}</div>`;
+    } else if (q.question_type === 'text') {
+        return `<textarea class="mq-text" data-question="${q.key}" placeholder="Enter your response..." rows="3"></textarea>`;
+    }
+
+    return `<p class="error">Unknown question type: ${q.question_type}</p>`;
+}
+
+function setupQuestionListeners(question) {
+    const q = question;
+    const formContainer = document.getElementById(`question-form-${q.key}`);
+    if (!formContainer) return;
+
+    if (q.question_type === 'rating') {
+        const stars = formContainer.querySelectorAll('.mq-star');
+        stars.forEach(star => {
+            star.addEventListener('click', () => {
+                const value = parseInt(star.dataset.value);
+                questionResponses[q.key] = { value: value };
+
+                // Update star visual
+                stars.forEach(s => {
+                    s.classList.toggle('active', parseInt(s.dataset.value) <= value);
+                });
+
+                updateConditionalVisibility();
+                updateQuestionProgress();
+                updateButtons();
+            });
+
+            star.addEventListener('mouseenter', () => {
+                const value = parseInt(star.dataset.value);
+                stars.forEach(s => {
+                    s.classList.toggle('hover', parseInt(s.dataset.value) <= value);
+                });
+            });
+
+            star.addEventListener('mouseleave', () => {
+                stars.forEach(s => s.classList.remove('hover'));
+            });
+        });
+    } else if (q.question_type === 'binary') {
+        const btns = formContainer.querySelectorAll('.mq-binary-btn');
+        btns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                btns.forEach(b => b.classList.remove('selected'));
+                btn.classList.add('selected');
+                questionResponses[q.key] = { value: btn.dataset.value };
+
+                updateConditionalVisibility();
+                updateQuestionProgress();
+                updateButtons();
+            });
+        });
+    } else if (q.question_type === 'multi_label') {
+        const checkboxes = formContainer.querySelectorAll('.mq-checkbox');
+        checkboxes.forEach(cb => {
+            cb.addEventListener('change', () => {
+                const selected = Array.from(checkboxes)
+                    .filter(c => c.checked)
+                    .map(c => c.dataset.value);
+                questionResponses[q.key] = { selected: selected };
+
+                updateConditionalVisibility();
+                updateQuestionProgress();
+                updateButtons();
+            });
+        });
+    } else if (q.question_type === 'text') {
+        const textarea = formContainer.querySelector('.mq-text');
+        if (textarea) {
+            textarea.addEventListener('input', () => {
+                questionResponses[q.key] = { text: textarea.value };
+                updateQuestionProgress();
+                updateButtons();
+            });
+        }
+    }
+}
+
+function updateConditionalVisibility() {
+    projectQuestions.forEach(q => {
+        if (!q.conditional) return;
+
+        const block = document.querySelector(`.question-block[data-question-key="${q.key}"]`);
+        if (!block) return;
+
+        const cond = q.conditional;
+        const targetResponse = questionResponses[cond.question];
+
+        let visible = false;
+
+        if (cond.equals !== null && cond.equals !== undefined) {
+            visible = targetResponse && targetResponse.value === cond.equals;
+        } else if (cond.not_equals !== null && cond.not_equals !== undefined) {
+            visible = !targetResponse || targetResponse.value !== cond.not_equals;
+        } else if (cond.contains !== null && cond.contains !== undefined) {
+            visible = targetResponse && targetResponse.selected && targetResponse.selected.includes(cond.contains);
+        }
+
+        block.style.display = visible ? 'block' : 'none';
+        block.dataset.conditionalVisible = visible ? 'true' : 'false';
+    });
+}
+
+function updateQuestionProgress() {
+    const progressEl = document.getElementById('questionProgress');
+    if (!progressEl) return;
+
+    const requiredQuestions = projectQuestions.filter(q => {
+        if (!q.required) return false;
+
+        // Check if conditionally hidden
+        const block = document.querySelector(`.question-block[data-question-key="${q.key}"]`);
+        if (block && block.dataset.conditionalVisible === 'false') return false;
+
+        return true;
+    });
+
+    const answeredCount = requiredQuestions.filter(q => {
+        const resp = questionResponses[q.key];
+        return isQuestionAnswered(q, resp);
+    }).length;
+
+    progressEl.innerHTML = `<span>${answeredCount} / ${requiredQuestions.length} required questions answered</span>`;
+}
+
+function isQuestionAnswered(question, response) {
+    if (!response) return false;
+
+    if (question.question_type === 'rating') {
+        return response.value !== undefined && response.value !== null;
+    } else if (question.question_type === 'binary') {
+        return response.value !== undefined && response.value !== null && response.value !== '';
+    } else if (question.question_type === 'multi_label') {
+        const minSelect = question.config?.min_select || 0;
+        return (response.selected || []).length >= minSelect;
+    } else if (question.question_type === 'text') {
+        return response.text && response.text.trim().length > 0;
+    }
+
+    return false;
+}
+
+function restoreMultiQuestionForm() {
+    projectQuestions.forEach(q => {
+        const resp = questionResponses[q.key];
+        if (!resp) return;
+
+        const formContainer = document.getElementById(`question-form-${q.key}`);
+        if (!formContainer) return;
+
+        if (q.question_type === 'rating' && resp.value) {
+            const stars = formContainer.querySelectorAll('.mq-star');
+            stars.forEach(s => {
+                s.classList.toggle('active', parseInt(s.dataset.value) <= resp.value);
+            });
+        } else if (q.question_type === 'binary' && resp.value) {
+            const btns = formContainer.querySelectorAll('.mq-binary-btn');
+            btns.forEach(btn => {
+                btn.classList.toggle('selected', btn.dataset.value === resp.value);
+            });
+        } else if (q.question_type === 'multi_label' && resp.selected) {
+            const checkboxes = formContainer.querySelectorAll('.mq-checkbox');
+            checkboxes.forEach(cb => {
+                cb.checked = resp.selected.includes(cb.dataset.value);
+            });
+        } else if (q.question_type === 'text' && resp.text) {
+            const textarea = formContainer.querySelector('.mq-text');
+            if (textarea) textarea.value = resp.text;
+        }
+    });
+
+    updateConditionalVisibility();
+    updateQuestionProgress();
+}
+
+function clearMultiQuestionForm() {
+    questionResponses = {};
+
+    projectQuestions.forEach(q => {
+        const formContainer = document.getElementById(`question-form-${q.key}`);
+        if (!formContainer) return;
+
+        if (q.question_type === 'rating') {
+            formContainer.querySelectorAll('.mq-star').forEach(s => s.classList.remove('active'));
+        } else if (q.question_type === 'binary') {
+            formContainer.querySelectorAll('.mq-binary-btn').forEach(btn => btn.classList.remove('selected'));
+        } else if (q.question_type === 'multi_label') {
+            formContainer.querySelectorAll('.mq-checkbox').forEach(cb => cb.checked = false);
+        } else if (q.question_type === 'text') {
+            const textarea = formContainer.querySelector('.mq-text');
+            if (textarea) textarea.value = '';
+        }
+    });
+
+    updateConditionalVisibility();
+    updateQuestionProgress();
+}
+
 function setupStarListeners() {
     const stars = document.querySelectorAll('#starRating .star');
     stars.forEach(star => {
@@ -537,7 +837,7 @@ function displayRow(row) {
             .map(([key, value]) => `
                 <div class="content-field">
                     <div class="field-label">${escapeHtml(key)}</div>
-                    <div class="field-value">${escapeHtml(value)}</div>
+                    <div class="field-value">${renderFieldValue(key, value)}</div>
                 </div>
             `).join('');
 
@@ -545,19 +845,19 @@ function displayRow(row) {
             ${prompt ? `
                 <div class="content-field pairwise-prompt">
                     <div class="field-label">Prompt</div>
-                    <div class="field-value">${escapeHtml(prompt)}</div>
+                    <div class="field-value">${renderFieldValue('prompt', prompt)}</div>
                 </div>
             ` : ''}
             ${otherFields}
             <div class="pairwise-comparison">
                 <div class="pairwise-response pairwise-response-a">
                     <div class="pairwise-label">Response A</div>
-                    <div class="pairwise-content">${escapeHtml(responseA)}</div>
+                    <div class="pairwise-content">${renderFieldValue('response_a', responseA)}</div>
                 </div>
                 <div class="pairwise-divider"></div>
                 <div class="pairwise-response pairwise-response-b">
                     <div class="pairwise-label">Response B</div>
-                    <div class="pairwise-content">${escapeHtml(responseB)}</div>
+                    <div class="pairwise-content">${renderFieldValue('response_b', responseB)}</div>
                 </div>
             </div>
         `;
@@ -566,12 +866,15 @@ function displayRow(row) {
         contentHtml = Object.entries(content).map(([key, value]) => `
             <div class="content-field">
                 <div class="field-label">${escapeHtml(key)}</div>
-                <div class="field-value">${escapeHtml(value)}</div>
+                <div class="field-value">${renderFieldValue(key, value)}</div>
             </div>
         `).join('');
     }
 
     document.getElementById('rowContent').innerHTML = contentHtml;
+
+    // Load any media references asynchronously
+    loadMediaReferences();
     document.getElementById('rowNumber').textContent = `Row #${row.row_index}`;
     document.getElementById('ratingControls').style.display = 'block';
 
@@ -634,15 +937,26 @@ function displayRow(row) {
         } else {
             statusEl.textContent = 'Rated';
         }
+
+        // Restore multi-question responses
+        if (useMultiQuestions && row.my_rating.response) {
+            questionResponses = { ...row.my_rating.response };
+            restoreMultiQuestionForm();
+            const answeredCount = Object.keys(questionResponses).length;
+            statusEl.textContent = `Rated: ${answeredCount} question(s) answered`;
+        }
     } else {
         statusEl.textContent = 'Not rated by you';
         statusEl.className = 'rating-status unrated';
         selectedRating = 0;
         currentResponse = null;
+        questionResponses = {};
         document.getElementById('comment').value = '';
 
         // Clear form state
-        if (evaluationType === 'binary') {
+        if (useMultiQuestions) {
+            clearMultiQuestionForm();
+        } else if (evaluationType === 'binary') {
             document.querySelectorAll('.binary-btn').forEach(btn => btn.classList.remove('selected'));
         } else if (evaluationType === 'multi_label') {
             document.querySelectorAll('#multiLabelOptions input[type="checkbox"]').forEach(cb => cb.checked = false);
@@ -729,7 +1043,23 @@ function updateStars() {
 function updateButtons() {
     let hasValidResponse = false;
 
-    if (evaluationType === 'rating') {
+    // Multi-question mode validation
+    if (useMultiQuestions && projectQuestions.length > 0) {
+        const requiredQuestions = projectQuestions.filter(q => {
+            if (!q.required) return false;
+
+            // Check if conditionally hidden
+            const block = document.querySelector(`.question-block[data-question-key="${q.key}"]`);
+            if (block && block.dataset.conditionalVisible === 'false') return false;
+
+            return true;
+        });
+
+        hasValidResponse = requiredQuestions.every(q => {
+            const resp = questionResponses[q.key];
+            return isQuestionAnswered(q, resp);
+        });
+    } else if (evaluationType === 'rating') {
         hasValidResponse = selectedRating > 0;
     } else if (evaluationType === 'binary') {
         hasValidResponse = currentResponse && currentResponse.value;
@@ -783,10 +1113,6 @@ function navigateRow(direction) {
 async function saveRating(goNext) {
     if (currentRows.length === 0) return;
 
-    // Validate that we have a response
-    if (evaluationType === 'rating' && selectedRating === 0) return;
-    if (!currentResponse && evaluationType !== 'rating') return;
-
     const row = currentRows[0];
     const comment = document.getElementById('comment').value.trim();
 
@@ -797,11 +1123,18 @@ async function saveRating(goNext) {
         comment: comment || null
     };
 
-    // Add rating_value for rating type (backward compatibility)
-    if (evaluationType === 'rating') {
+    // Multi-question mode
+    if (useMultiQuestions && projectQuestions.length > 0) {
+        // Build response object with all question responses
+        requestBody.response = { ...questionResponses };
+    } else if (evaluationType === 'rating') {
+        // Validate that we have a response
+        if (selectedRating === 0) return;
         requestBody.rating_value = selectedRating;
         requestBody.response = { value: selectedRating };
     } else {
+        // Validate that we have a response
+        if (!currentResponse) return;
         requestBody.response = currentResponse;
     }
 
@@ -923,11 +1256,301 @@ function handleKeyboard(e) {
     }
 }
 
+// ============== Media Rendering Functions ==============
+
+/**
+ * Detect the type of content in a field value
+ * @param {string} value - The field value
+ * @returns {object} - { type, value, mediaId }
+ */
+function detectContentType(value) {
+    if (!value || typeof value !== 'string') {
+        return { type: 'text', value: value };
+    }
+
+    const trimmed = value.trim();
+
+    // Check for internal media reference
+    if (trimmed.startsWith('media://')) {
+        const mediaId = trimmed.substring(8);
+        return { type: 'media_ref', value: trimmed, mediaId: mediaId };
+    }
+
+    // Check for YouTube URLs
+    if (trimmed.includes('youtube.com') || trimmed.includes('youtu.be')) {
+        return { type: 'youtube', value: trimmed };
+    }
+
+    // Check for Vimeo URLs
+    if (trimmed.includes('vimeo.com')) {
+        return { type: 'vimeo', value: trimmed };
+    }
+
+    // Check for URLs with media extensions
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+        const lower = trimmed.toLowerCase();
+        if (/\.(png|jpg|jpeg|gif|webp|svg)(\?|$)/i.test(lower)) {
+            return { type: 'image_url', value: trimmed };
+        }
+        if (/\.(mp4|webm|ogg)(\?|$)/i.test(lower)) {
+            return { type: 'video_url', value: trimmed };
+        }
+        if (/\.(mp3|wav|ogg)(\?|$)/i.test(lower)) {
+            return { type: 'audio_url', value: trimmed };
+        }
+        if (/\.pdf(\?|$)/i.test(lower)) {
+            return { type: 'pdf_url', value: trimmed };
+        }
+        return { type: 'url', value: trimmed };
+    }
+
+    // Check for data URLs
+    if (trimmed.startsWith('data:image/')) {
+        return { type: 'image_data', value: trimmed };
+    }
+    if (trimmed.startsWith('data:video/')) {
+        return { type: 'video_data', value: trimmed };
+    }
+    if (trimmed.startsWith('data:audio/')) {
+        return { type: 'audio_data', value: trimmed };
+    }
+
+    // Default to text
+    return { type: 'text', value: trimmed };
+}
+
+/**
+ * Get YouTube video ID from URL
+ */
+function getYoutubeId(url) {
+    const match = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+    return match ? match[1] : null;
+}
+
+/**
+ * Get Vimeo video ID from URL
+ */
+function getVimeoId(url) {
+    const match = url.match(/vimeo\.com\/(?:video\/)?(\d+)/);
+    return match ? match[1] : null;
+}
+
+/**
+ * Render media content based on detected type
+ * @param {string} value - The field value
+ * @param {string} fieldKey - The field key for labeling
+ * @returns {string} - HTML string for the media content
+ */
+function renderMediaContent(value, fieldKey) {
+    const content = detectContentType(value);
+
+    switch (content.type) {
+        case 'media_ref':
+            // Internal media file - render based on what we know
+            return renderMediaReference(content.mediaId, fieldKey);
+
+        case 'image_url':
+        case 'image_data':
+            return `
+                <div class="media-container media-image">
+                    <img src="${escapeHtml(content.value)}"
+                         alt="${escapeHtml(fieldKey)}"
+                         onclick="openMediaViewer(this.src, 'image')"
+                         loading="lazy">
+                </div>`;
+
+        case 'video_url':
+        case 'video_data':
+            return `
+                <div class="media-container media-video">
+                    <video controls preload="metadata">
+                        <source src="${escapeHtml(content.value)}">
+                        Your browser does not support video playback.
+                    </video>
+                </div>`;
+
+        case 'audio_url':
+        case 'audio_data':
+            return `
+                <div class="media-container media-audio">
+                    <audio controls preload="metadata">
+                        <source src="${escapeHtml(content.value)}">
+                        Your browser does not support audio playback.
+                    </audio>
+                </div>`;
+
+        case 'youtube':
+            const ytId = getYoutubeId(content.value);
+            if (ytId) {
+                return `
+                    <div class="media-container media-video media-embed">
+                        <iframe src="https://www.youtube.com/embed/${ytId}"
+                                frameborder="0"
+                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                allowfullscreen></iframe>
+                    </div>`;
+            }
+            return `<a href="${escapeHtml(content.value)}" target="_blank" class="media-link">YouTube Video</a>`;
+
+        case 'vimeo':
+            const vimeoId = getVimeoId(content.value);
+            if (vimeoId) {
+                return `
+                    <div class="media-container media-video media-embed">
+                        <iframe src="https://player.vimeo.com/video/${vimeoId}"
+                                frameborder="0"
+                                allow="autoplay; fullscreen; picture-in-picture"
+                                allowfullscreen></iframe>
+                    </div>`;
+            }
+            return `<a href="${escapeHtml(content.value)}" target="_blank" class="media-link">Vimeo Video</a>`;
+
+        case 'pdf_url':
+            return `
+                <div class="media-container media-pdf">
+                    <a href="${escapeHtml(content.value)}" target="_blank" class="pdf-link">
+                        <span class="pdf-icon">📄</span>
+                        <span>View PDF</span>
+                    </a>
+                    <iframe src="${escapeHtml(content.value)}" class="pdf-embed"></iframe>
+                </div>`;
+
+        case 'url':
+            return `<a href="${escapeHtml(content.value)}" target="_blank" class="media-link">${escapeHtml(content.value)}</a>`;
+
+        case 'text':
+        default:
+            return escapeHtml(content.value);
+    }
+}
+
+/**
+ * Render a media reference (media://id)
+ */
+function renderMediaReference(mediaId, fieldKey) {
+    const mediaUrl = `/api/media/${mediaId}`;
+
+    // We'll fetch info about the media file to determine type
+    // For now, we'll render a placeholder that loads dynamically
+    return `
+        <div class="media-container media-ref" data-media-id="${escapeHtml(mediaId)}">
+            <div class="media-loading">Loading media...</div>
+        </div>`;
+}
+
+/**
+ * Load media references in the current row
+ */
+async function loadMediaReferences() {
+    const mediaContainers = document.querySelectorAll('.media-ref[data-media-id]');
+
+    for (const container of mediaContainers) {
+        const mediaId = container.dataset.mediaId;
+        try {
+            const response = await fetch(`/api/media/${mediaId}/info`, { credentials: 'same-origin' });
+            if (!response.ok) {
+                container.innerHTML = '<span class="media-error">Media not found</span>';
+                continue;
+            }
+
+            const info = await response.json();
+            const mediaUrl = info.url;
+
+            if (info.mime_type.startsWith('image/')) {
+                container.innerHTML = `
+                    <img src="${escapeHtml(mediaUrl)}"
+                         alt="${escapeHtml(info.original_name)}"
+                         onclick="openMediaViewer(this.src, 'image')"
+                         loading="lazy">`;
+                container.classList.add('media-image');
+            } else if (info.mime_type.startsWith('video/')) {
+                container.innerHTML = `
+                    <video controls preload="metadata">
+                        <source src="${escapeHtml(mediaUrl)}" type="${escapeHtml(info.mime_type)}">
+                        Your browser does not support video playback.
+                    </video>`;
+                container.classList.add('media-video');
+            } else if (info.mime_type.startsWith('audio/')) {
+                container.innerHTML = `
+                    <audio controls preload="metadata">
+                        <source src="${escapeHtml(mediaUrl)}" type="${escapeHtml(info.mime_type)}">
+                        Your browser does not support audio playback.
+                    </audio>`;
+                container.classList.add('media-audio');
+            } else if (info.mime_type === 'application/pdf') {
+                container.innerHTML = `
+                    <a href="${escapeHtml(mediaUrl)}" target="_blank" class="pdf-link">
+                        <span class="pdf-icon">📄</span>
+                        <span>${escapeHtml(info.original_name)}</span>
+                    </a>
+                    <iframe src="${escapeHtml(mediaUrl)}" class="pdf-embed"></iframe>`;
+                container.classList.add('media-pdf');
+            } else {
+                container.innerHTML = `
+                    <a href="${escapeHtml(mediaUrl)}" target="_blank" class="media-download">
+                        Download: ${escapeHtml(info.original_name)}
+                    </a>`;
+            }
+        } catch (error) {
+            console.error('Failed to load media:', error);
+            container.innerHTML = '<span class="media-error">Failed to load media</span>';
+        }
+    }
+}
+
+/**
+ * Open media in a lightbox/viewer
+ */
+function openMediaViewer(src, type) {
+    const viewer = document.createElement('div');
+    viewer.className = 'media-viewer-overlay';
+    viewer.onclick = (e) => {
+        if (e.target === viewer) viewer.remove();
+    };
+
+    let content = '';
+    if (type === 'image') {
+        content = `<img src="${escapeHtml(src)}" alt="Enlarged view">`;
+    }
+
+    viewer.innerHTML = `
+        <div class="media-viewer-content">
+            <button class="media-viewer-close" onclick="this.parentElement.parentElement.remove()">&times;</button>
+            ${content}
+        </div>`;
+
+    document.body.appendChild(viewer);
+}
+
+/**
+ * Render a field value with media support
+ * @param {string} key - The field key
+ * @param {any} value - The field value
+ * @returns {string} - HTML string for the field
+ */
+function renderFieldValue(key, value) {
+    if (value === null || value === undefined || value === '') {
+        return '';
+    }
+
+    // Convert to string if needed
+    const strValue = String(value);
+
+    // Check if this looks like media content
+    const content = detectContentType(strValue);
+    if (content.type !== 'text') {
+        return renderMediaContent(strValue, key);
+    }
+
+    // Regular text - escape and preserve newlines
+    return escapeHtml(strValue).replace(/\n/g, '<br>');
+}
+
 // ============== Utility Functions ==============
 
 function escapeHtml(text) {
     if (text === null || text === undefined) return '';
     const div = document.createElement('div');
-    div.textContent = text;
+    div.textContent = String(text);
     return div.innerHTML;
 }

@@ -5,7 +5,7 @@ from fastapi.responses import RedirectResponse
 import os
 
 from .database import init_db, get_db
-from .routers import uploads, ratings, exports, auth, projects, users
+from .routers import uploads, ratings, exports, auth, projects, users, questions, media
 from .dependencies import get_current_user_optional, get_current_user
 from .models import User
 
@@ -24,10 +24,12 @@ templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
 # Include routers
 app.include_router(auth.router)
 app.include_router(projects.router)
+app.include_router(questions.router)
 app.include_router(users.router)
 app.include_router(uploads.router)
 app.include_router(ratings.router)
 app.include_router(exports.router)
+app.include_router(media.router)
 
 
 @app.on_event("startup")

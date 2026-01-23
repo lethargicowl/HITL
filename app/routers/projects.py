@@ -8,8 +8,9 @@ from ..database import get_db
 import json
 
 from ..models import (
-    User, Project, ProjectAssignment, Session as DataSession, Rating,
-    ProjectCreate, ProjectResponse, ProjectListItem, AssignRatersRequest, UserBasic
+    User, Project, ProjectAssignment, Session as DataSession, Rating, EvaluationQuestion,
+    ProjectCreate, ProjectResponse, ProjectListItem, AssignRatersRequest, UserBasic,
+    EvaluationQuestionResponse, ProjectWithQuestionsResponse
 )
 from ..dependencies import get_current_user, require_requester
 
@@ -121,13 +122,33 @@ async def list_projects(
     return result
 
 
-@router.get("/{project_id}", response_model=ProjectResponse)
+def get_questions_for_project(project: Project) -> list:
+    """Get formatted questions for a project."""
+    return [
+        EvaluationQuestionResponse(
+            id=q.id,
+            project_id=q.project_id,
+            order=q.order,
+            key=q.key,
+            label=q.label,
+            description=q.description,
+            question_type=q.question_type,
+            config=json.loads(q.config) if q.config else {},
+            required=q.required,
+            conditional=json.loads(q.conditional) if q.conditional else None,
+            created_at=q.created_at
+        )
+        for q in sorted(project.questions, key=lambda x: x.order)
+    ]
+
+
+@router.get("/{project_id}", response_model=ProjectWithQuestionsResponse)
 async def get_project(
     project_id: str,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Get project details."""
+    """Get project details including questions if multi-question mode."""
     project = db.query(Project).filter(Project.id == project_id).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
@@ -151,7 +172,9 @@ async def get_project(
         for a in project.assignments
     ]
 
-    return ProjectResponse(
+    questions = get_questions_for_project(project) if project.use_multi_questions else []
+
+    return ProjectWithQuestionsResponse(
         id=project.id,
         name=project.name,
         description=project.description,
@@ -160,6 +183,8 @@ async def get_project(
         evaluation_type=project.evaluation_type or "rating",
         evaluation_config=json.loads(project.evaluation_config) if project.evaluation_config else None,
         instructions=project.instructions,
+        use_multi_questions=project.use_multi_questions or False,
+        questions=questions,
         assigned_raters=assigned_raters,
         **stats
     )
@@ -191,6 +216,7 @@ class ProjectUpdate(BaseModel):
     evaluation_type: Optional[str] = None
     evaluation_config: Optional[dict] = None
     instructions: Optional[str] = None
+    use_multi_questions: Optional[bool] = None
 
 
 @router.patch("/{project_id}", response_model=ProjectResponse)
@@ -219,6 +245,8 @@ async def update_project(
         project.evaluation_config = json.dumps(project_data.evaluation_config)
     if project_data.instructions is not None:
         project.instructions = project_data.instructions
+    if project_data.use_multi_questions is not None:
+        project.use_multi_questions = project_data.use_multi_questions
 
     db.commit()
     db.refresh(project)

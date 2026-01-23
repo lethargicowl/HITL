@@ -1,11 +1,11 @@
-from sqlalchemy import Column, String, Integer, Text, DateTime, ForeignKey, UniqueConstraint
+from sqlalchemy import Column, String, Integer, Text, DateTime, ForeignKey, UniqueConstraint, Boolean
 from sqlalchemy.orm import relationship
 from datetime import datetime
 import uuid
 
 from .database import Base
 from pydantic import BaseModel, Field
-from typing import Optional, List
+from typing import Optional, List, Any
 
 
 # ============== SQLAlchemy ORM Models ==============
@@ -46,15 +46,58 @@ class Project(Base):
     owner_id = Column(String, ForeignKey("users.id"), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
-    # Evaluation schema fields
-    evaluation_type = Column(String, default="rating")  # rating, binary, multi_label, multi_criteria
+    # Evaluation schema fields (legacy single-question mode)
+    evaluation_type = Column(String, default="rating")  # rating, binary, multi_label, multi_criteria, pairwise
     evaluation_config = Column(Text, nullable=True)  # JSON config for the evaluation type
     instructions = Column(Text, nullable=True)  # Markdown instructions for raters
+
+    # Multi-question mode
+    use_multi_questions = Column(Boolean, default=False)  # If True, use questions table instead of evaluation_type
 
     # Relationships
     owner = relationship("User", back_populates="owned_projects")
     sessions = relationship("Session", back_populates="project", cascade="all, delete-orphan")
     assignments = relationship("ProjectAssignment", back_populates="project", cascade="all, delete-orphan")
+    questions = relationship("EvaluationQuestion", back_populates="project", cascade="all, delete-orphan", order_by="EvaluationQuestion.order")
+    media_files = relationship("MediaFile", back_populates="project", cascade="all, delete-orphan")
+
+
+class MediaFile(Base):
+    """Uploaded media file (images, videos, audio, PDFs)."""
+    __tablename__ = "media_files"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    project_id = Column(String, ForeignKey("projects.id"), nullable=False)
+    filename = Column(String, nullable=False)  # Stored filename (UUID-based)
+    original_name = Column(String, nullable=False)  # Original uploaded filename
+    mime_type = Column(String, nullable=False)  # e.g., "image/png", "video/mp4"
+    size_bytes = Column(Integer, nullable=False)
+    storage_path = Column(String, nullable=False)  # Relative path in storage
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    project = relationship("Project", back_populates="media_files")
+
+
+class EvaluationQuestion(Base):
+    """Individual evaluation question within a project."""
+    __tablename__ = "evaluation_questions"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    project_id = Column(String, ForeignKey("projects.id"), nullable=False)
+    order = Column(Integer, default=0)  # Display order
+    key = Column(String, nullable=False)  # Unique key within project (e.g., "quality", "safety")
+    label = Column(String, nullable=False)  # Display label (e.g., "Overall Quality")
+    description = Column(Text, nullable=True)  # Help text shown to raters
+    question_type = Column(String, nullable=False)  # rating, binary, multi_label, multi_criteria, pairwise
+    config = Column(Text, nullable=False)  # JSON config for this question type
+    required = Column(Boolean, default=True)
+    conditional = Column(Text, nullable=True)  # JSON: {"question": "is_safe", "equals": "no"}
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Unique key per project
+    __table_args__ = (UniqueConstraint('project_id', 'key', name='unique_question_key_per_project'),)
+
+    project = relationship("Project", back_populates="questions")
 
 
 class ProjectAssignment(Base):
@@ -262,6 +305,8 @@ class ProjectDetailForSession(BaseModel):
     evaluation_type: str = "rating"
     evaluation_config: Optional[dict] = None
     instructions: Optional[str] = None
+    use_multi_questions: bool = False
+    questions: List[dict] = []  # Simplified question list for session view
 
     class Config:
         from_attributes = True
@@ -340,3 +385,130 @@ class UploadResponse(BaseModel):
     columns: List[str]
     project_id: str
     message: str
+
+
+# --- Evaluation Question Schemas ---
+
+class QuestionConditional(BaseModel):
+    """Conditional display rule for a question."""
+    question: str  # Key of the question to check
+    equals: Optional[Any] = None  # Show if equals this value
+    not_equals: Optional[Any] = None  # Show if not equals this value
+    contains: Optional[Any] = None  # For multi-select: show if contains this value
+
+
+class EvaluationQuestionCreate(BaseModel):
+    key: str = Field(min_length=1, max_length=50, pattern="^[a-z][a-z0-9_]*$")
+    label: str = Field(min_length=1, max_length=200)
+    description: Optional[str] = None
+    question_type: str = Field(pattern="^(rating|binary|multi_label|multi_criteria|pairwise|text)$")
+    config: dict  # Type-specific configuration
+    required: bool = True
+    conditional: Optional[QuestionConditional] = None
+    order: Optional[int] = None
+
+
+class EvaluationQuestionUpdate(BaseModel):
+    label: Optional[str] = None
+    description: Optional[str] = None
+    config: Optional[dict] = None
+    required: Optional[bool] = None
+    conditional: Optional[QuestionConditional] = None
+    order: Optional[int] = None
+
+
+class EvaluationQuestionResponse(BaseModel):
+    id: str
+    project_id: str
+    order: int
+    key: str
+    label: str
+    description: Optional[str] = None
+    question_type: str
+    config: dict
+    required: bool = True
+    conditional: Optional[dict] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class QuestionsReorderRequest(BaseModel):
+    """Request to reorder questions."""
+    question_ids: List[str]  # Ordered list of question IDs
+
+
+class ProjectWithQuestionsResponse(BaseModel):
+    """Project response including questions for multi-question mode."""
+    id: str
+    name: str
+    description: Optional[str]
+    owner_id: str
+    created_at: datetime
+    evaluation_type: str = "rating"
+    evaluation_config: Optional[dict] = None
+    instructions: Optional[str] = None
+    use_multi_questions: bool = False
+    questions: List[EvaluationQuestionResponse] = []
+    session_count: int = 0
+    total_rows: int = 0
+    rated_rows: int = 0
+    assigned_raters: List[UserBasic] = []
+
+    class Config:
+        from_attributes = True
+
+
+# --- Media File Schemas ---
+
+class MediaFileResponse(BaseModel):
+    """Response schema for a media file."""
+    id: str
+    project_id: str
+    filename: str
+    original_name: str
+    mime_type: str
+    size_bytes: int
+    storage_path: str
+    url: str  # Computed URL for accessing the file
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class MediaUploadResponse(BaseModel):
+    """Response after uploading media files."""
+    files: List[MediaFileResponse]
+    message: str
+
+
+class MediaContentType(BaseModel):
+    """Describes how to render content in a data row."""
+    type: str  # text, image, video, audio, pdf, code, html, url
+    value: str  # The actual content or reference
+    mime_type: Optional[str] = None  # MIME type if applicable
+    label: Optional[str] = None  # Display label
+
+
+# Supported MIME types for media files
+SUPPORTED_MEDIA_TYPES = {
+    # Images
+    "image/png": "image",
+    "image/jpeg": "image",
+    "image/gif": "image",
+    "image/webp": "image",
+    "image/svg+xml": "image",
+    # Videos
+    "video/mp4": "video",
+    "video/webm": "video",
+    "video/ogg": "video",
+    # Audio
+    "audio/mpeg": "audio",
+    "audio/wav": "audio",
+    "audio/ogg": "audio",
+    "audio/webm": "audio",
+    # Documents
+    "application/pdf": "pdf",
+}

@@ -1,0 +1,6 @@
+prompt,media,media_type,context
+"Rate the quality of this image","https://picsum.photos/seed/photo1/500/400","image","Stock photo for website"
+"How clear is this video tutorial?","https://www.youtube.com/watch?v=dQw4w9WgXcQ","youtube","Sample YouTube embed test"
+"Evaluate this architectural photo","https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=500","image","Modern building exterior"
+"Rate this nature scene","https://picsum.photos/seed/nature/500/400","image","Nature photography"
+"How engaging is this content?","https://vimeo.com/148751763","vimeo","Sample Vimeo embed test"
