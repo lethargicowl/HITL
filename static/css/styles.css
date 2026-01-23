@@ -2142,15 +2142,15 @@ header h1 {
 .examples-panel {
     position: fixed;
     right: 0;
-    top: 60px;
+    top: 0;
     bottom: 0;
-    width: 380px;
+    width: 400px;
     background: white;
     border-left: 1px solid #e0e0e0;
-    box-shadow: -2px 0 8px rgba(0,0,0,0.1);
+    box-shadow: -4px 0 24px rgba(0,0,0,0.2);
     transform: translateX(100%);
-    transition: transform 0.3s ease;
-    z-index: 100;
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    z-index: 3000;
     display: flex;
     flex-direction: column;
 }
@@ -2272,27 +2272,28 @@ header h1 {
 /* Examples Toggle Button */
 .examples-toggle-btn {
     position: fixed;
-    right: 16px;
-    bottom: 80px;
-    width: 50px;
-    height: 50px;
+    right: 24px;
+    bottom: 24px;
+    width: 56px;
+    height: 56px;
     border-radius: 50%;
     background: #4a6cf7;
     color: white;
-    border: none;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    border: 2px solid white;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.3);
     cursor: pointer;
-    font-size: 20px;
+    font-size: 24px;
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 99;
-    transition: transform 0.2s, background 0.2s;
+    z-index: 2500;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .examples-toggle-btn:hover {
     transform: scale(1.1);
     background: #3a5ce7;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.4);
 }
 
 .examples-toggle-btn .badge {
@@ -2301,13 +2302,15 @@ header h1 {
     right: -4px;
     background: #f44336;
     color: white;
-    font-size: 0.7rem;
-    width: 20px;
-    height: 20px;
+    font-size: 0.75rem;
+    font-weight: bold;
+    width: 24px;
+    height: 24px;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
+    border: 2px solid white;
 }
 
 /* Keyboard hint for examples */

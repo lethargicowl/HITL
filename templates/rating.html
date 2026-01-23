@@ -11,6 +11,9 @@
         </div>
         <div class="header-right">
             <span id="unsaved-indicator" class="unsaved-indicator" style="display: none;">Unsaved</span>
+            <button class="btn-secondary" id="headerExamplesBtn" onclick="toggleExamplesPanel()" style="display: none;">
+                Examples <span id="headerExamplesCount">(0)</span>
+            </button>
             <select id="exportFormat" class="export-select">
                 <option value="xlsx">Excel (.xlsx)</option>
                 <option value="csv">CSV (.csv)</option>
@@ -128,88 +131,9 @@
 
 <script>
     const SESSION_ID = "{{ session_id }}";
-    let annotationExamples = [];
 
     document.addEventListener('DOMContentLoaded', () => {
         initRating(SESSION_ID);
-    });
-
-    // Examples Panel Functions
-    function toggleExamplesPanel() {
-        const panel = document.getElementById('examplesPanel');
-        panel.classList.toggle('open');
-    }
-
-    async function loadAnnotationExamples(projectId) {
-        try {
-            const response = await fetch(`/api/projects/${projectId}/examples`, { credentials: 'same-origin' });
-            if (!response.ok) return;
-
-            annotationExamples = await response.json();
-
-            const toggleBtn = document.getElementById('examplesToggleBtn');
-            const badge = document.getElementById('examplesBadge');
-
-            if (annotationExamples.length > 0) {
-                toggleBtn.style.display = 'flex';
-                badge.textContent = annotationExamples.length;
-                renderExamplesPanel();
-            }
-        } catch (error) {
-            console.error('Failed to load examples:', error);
-        }
-    }
-
-    function renderExamplesPanel() {
-        const container = document.getElementById('examplesPanelContent');
-
-        if (annotationExamples.length === 0) {
-            container.innerHTML = '<p class="empty-hint">No examples available for this project.</p>';
-            return;
-        }
-
-        container.innerHTML = annotationExamples.map(ex => `
-            <div class="example-card ${ex.is_positive ? '' : 'negative'}">
-                <div class="example-card-header">
-                    <span class="example-card-title">${escapeHtml(ex.title)}</span>
-                    <span class="example-card-type">${ex.is_positive ? '✓ Good' : '✗ Bad'}</span>
-                </div>
-                <div class="example-card-content">
-                    ${Object.entries(ex.content).map(([key, value]) => `
-                        <div class="field-label">${escapeHtml(key)}</div>
-                        <div class="field-value">${escapeHtml(String(value))}</div>
-                    `).join('')}
-                </div>
-                <div class="example-card-response">
-                    <strong>Expected Response:</strong>
-                    ${formatExampleResponse(ex.example_response)}
-                </div>
-                ${ex.explanation ? `<div class="example-card-explanation">${escapeHtml(ex.explanation)}</div>` : ''}
-            </div>
-        `).join('');
-    }
-
-    function formatExampleResponse(response) {
-        if (typeof response === 'object') {
-            // Multi-question or structured response
-            return Object.entries(response).map(([key, val]) => {
-                if (typeof val === 'object' && val.value !== undefined) {
-                    return `<div>${escapeHtml(key)}: <strong>${escapeHtml(String(val.value))}</strong></div>`;
-                }
-                return `<div>${escapeHtml(key)}: <strong>${escapeHtml(String(val))}</strong></div>`;
-            }).join('');
-        }
-        return escapeHtml(String(response));
-    }
-
-    // Add keyboard shortcut for examples panel
-    document.addEventListener('keydown', (e) => {
-        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-        if (e.key === 'e' || e.key === 'E') {
-            if (annotationExamples.length > 0) {
-                toggleExamplesPanel();
-            }
-        }
     });
 </script>
 {% endblock %}

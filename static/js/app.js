@@ -341,10 +341,8 @@ async function loadSession(sessionId) {
             }
         }
 
-        // Load annotation examples (if function exists - defined in rating.html)
-        if (typeof loadAnnotationExamples === 'function') {
-            loadAnnotationExamples(currentSession.project.id);
-        }
+        // Load annotation examples
+        loadAnnotationExamples(currentSession.project.id);
 
         // Render the appropriate evaluation form
         renderEvaluationForm();
@@ -1877,5 +1875,105 @@ document.addEventListener('keydown', (e) => {
         stepVideoFrame(-1);
     } else if (e.key === '.' || e.key === '>') {
         stepVideoFrame(1);
+    }
+});
+
+// ============== Annotation Examples ==============
+
+let annotationExamples = [];
+
+function toggleExamplesPanel() {
+    const panel = document.getElementById('examplesPanel');
+    if (panel) {
+        panel.classList.toggle('open');
+    }
+}
+
+async function loadAnnotationExamples(projectId) {
+    if (!projectId) {
+        console.error('[Examples] No project ID provided');
+        return;
+    }
+    try {
+        console.log('[Examples] Fetching for project:', projectId);
+        const response = await fetch(`/api/projects/${projectId}/examples`, { credentials: 'same-origin' });
+        
+        if (!response.ok) {
+            console.error('[Examples] API error:', response.status, response.statusText);
+            return;
+        }
+
+        annotationExamples = await response.json();
+        console.log('[Examples] Successfully loaded:', annotationExamples.length, 'items');
+
+        const toggleBtn = document.getElementById('examplesToggleBtn');
+        const badge = document.getElementById('examplesBadge');
+
+        if (annotationExamples.length > 0) {
+            if (toggleBtn) {
+                toggleBtn.style.setProperty('display', 'flex', 'important');
+                console.log('[Examples] Showing toggle button');
+            }
+            if (badge) badge.textContent = annotationExamples.length;
+            renderExamplesPanel();
+        } else {
+            console.log('[Examples] No examples found for this project');
+            if (toggleBtn) toggleBtn.style.display = 'none';
+        }
+    } catch (error) {
+        console.error('[Examples] Network or runtime error:', error);
+    }
+}
+
+function renderExamplesPanel() {
+    const container = document.getElementById('examplesPanelContent');
+    if (!container) return;
+
+    if (annotationExamples.length === 0) {
+        container.innerHTML = '<p class="empty-hint">No examples available for this project.</p>';
+        return;
+    }
+
+    container.innerHTML = annotationExamples.map(ex => `
+        <div class="example-card ${ex.is_positive ? '' : 'negative'}">
+            <div class="example-card-header">
+                <span class="example-card-title">${escapeHtml(ex.title)}</span>
+                <span class="example-card-type">${ex.is_positive ? '✓ Good' : '✗ Bad'}</span>
+            </div>
+            <div class="example-card-content">
+                ${Object.entries(ex.content).map(([key, value]) => `
+                    <div class="field-label">${escapeHtml(key)}</div>
+                    <div class="field-value">${typeof renderFieldValue === 'function' ? renderFieldValue(key, value) : escapeHtml(String(value))}</div>
+                `).join('')}
+            </div>
+            <div class="example-card-response">
+                <strong>Expected Response:</strong>
+                ${formatExampleResponse(ex.example_response)}
+            </div>
+            ${ex.explanation ? `<div class="example-card-explanation">${escapeHtml(ex.explanation)}</div>` : ''}
+        </div>
+    `).join('');
+}
+
+function formatExampleResponse(response) {
+    if (typeof response === 'object' && response !== null) {
+        // Multi-question or structured response
+        return Object.entries(response).map(([key, val]) => {
+            if (typeof val === 'object' && val !== null && val.value !== undefined) {
+                return `<div>${escapeHtml(key)}: <strong>${escapeHtml(String(val.value))}</strong></div>`;
+            }
+            return `<div>${escapeHtml(key)}: <strong>${escapeHtml(String(val))}</strong></div>`;
+        }).join('');
+    }
+    return escapeHtml(String(response));
+}
+
+// Add global keyboard shortcut for examples panel (E key)
+document.addEventListener('keydown', (e) => {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    if (e.key === 'e' || e.key === 'E') {
+        if (annotationExamples.length > 0) {
+            toggleExamplesPanel();
+        }
     }
 });
