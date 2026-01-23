@@ -3079,3 +3079,285 @@ textarea:focus-visible {
         max-height: 200px;
     }
 }
+
+/* ==================== Custom Video Player Pro ==================== */
+
+.video-pro-wrapper {
+    position: relative;
+    width: 100%;
+    background: #000;
+    border-radius: 8px;
+    overflow: hidden;
+    user-select: none;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    margin: 12px 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+.video-pro-wrapper.fullscreen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100% !important;
+    height: 100% !important;
+    z-index: 9999;
+    border-radius: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.video-pro-player {
+    width: 100%;
+    display: block;
+    max-height: 500px;
+    background: black;
+}
+
+.video-pro-wrapper.fullscreen .video-pro-player {
+    height: 100%;
+    max-height: none;
+    object-fit: contain;
+}
+
+/* Control Bar */
+.video-pro-controls {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    background: linear-gradient(to top, rgba(0,0,0,0.9), rgba(0,0,0,0.5), transparent);
+    padding: 20px 12px 12px;
+    opacity: 1; /* Always visible for now, or use hover logic */
+    transition: opacity 0.3s;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.video-pro-wrapper:hover .video-pro-controls {
+    opacity: 1;
+}
+
+/* Timeline */
+.video-pro-timeline {
+    position: relative;
+    width: 100%;
+    height: 6px;
+    background: rgba(255,255,255,0.3);
+    border-radius: 3px;
+    cursor: pointer;
+    transition: height 0.1s;
+}
+
+.video-pro-timeline:hover {
+    height: 10px;
+}
+
+.video-pro-progress {
+    position: absolute;
+    left: 0;
+    top: 0;
+    height: 100%;
+    background: #4a6cf7;
+    border-radius: 3px;
+    pointer-events: none;
+}
+
+.video-pro-thumb {
+    position: absolute;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: 14px;
+    height: 14px;
+    background: #fff;
+    border-radius: 50%;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+    opacity: 0;
+    transition: opacity 0.1s;
+    pointer-events: none;
+}
+
+.video-pro-timeline:hover .video-pro-thumb {
+    opacity: 1;
+}
+
+/* Control Buttons Row */
+.video-pro-buttons {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: white;
+}
+
+.video-pro-btn {
+    background: none;
+    border: none;
+    color: white;
+    cursor: pointer;
+    padding: 4px;
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 4px;
+    transition: background 0.2s;
+}
+
+.video-pro-btn:hover {
+    background: rgba(255,255,255,0.2);
+}
+
+.video-pro-btn:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+.video-pro-time {
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+    font-family: monospace;
+    color: #eee;
+    white-space: nowrap;
+    margin: 0 8px;
+}
+
+.video-pro-frame {
+    font-size: 12px;
+    color: #aaa;
+    font-variant-numeric: tabular-nums;
+    margin-right: auto; /* Spacer */
+}
+
+/* Right side controls */
+.video-pro-speed {
+    position: relative;
+}
+
+.video-pro-speed-btn {
+    font-size: 12px;
+    font-weight: 600;
+    width: auto;
+    padding: 0 8px;
+    min-width: 40px;
+}
+
+.video-pro-speed-menu {
+    position: absolute;
+    bottom: 100%;
+    right: 0;
+    background: rgba(0,0,0,0.9);
+    border-radius: 4px;
+    padding: 4px 0;
+    display: none;
+    margin-bottom: 8px;
+    flex-direction: column;
+    min-width: 60px;
+}
+
+.video-pro-speed-menu.open {
+    display: flex;
+}
+
+.video-pro-speed-opt {
+    padding: 6px 16px;
+    color: #ccc;
+    cursor: pointer;
+    font-size: 12px;
+    white-space: nowrap;
+    text-align: center;
+}
+
+.video-pro-speed-opt:hover {
+    background: rgba(255,255,255,0.1);
+    color: white;
+}
+
+.video-pro-speed-opt.active {
+    color: #4a6cf7;
+    font-weight: bold;
+}
+
+/* Loading Spinner */
+.video-pro-loading {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    display: none;
+}
+
+.video-pro-wrapper.buffering .video-pro-loading {
+    display: block;
+}
+
+/* Keyboard Hints Overlay */
+.video-pro-shortcuts {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    background: rgba(0,0,0,0.6);
+    padding: 8px 12px;
+    border-radius: 6px;
+    color: white;
+    font-size: 12px;
+    opacity: 0;
+    transition: opacity 0.3s;
+    pointer-events: none;
+    z-index: 10;
+}
+
+.video-pro-wrapper:hover .video-pro-shortcuts {
+    opacity: 1;
+}
+
+.video-pro-shortcut-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 4px;
+}
+
+/* Volume Control */
+.video-pro-volume-control {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.video-pro-volume-slider {
+    width: 60px;
+    height: 4px;
+    -webkit-appearance: none;
+    background: rgba(255,255,255,0.3);
+    border-radius: 2px;
+    outline: none;
+    cursor: pointer;
+}
+
+.video-pro-volume-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #fff;
+    cursor: pointer;
+}
+
+.video-pro-volume-slider::-moz-range-thumb {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #fff;
+    cursor: pointer;
+}
+
+/* Plyr Customizations */
+.plyr {
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    --plyr-color-main: #4a6cf7;
+}

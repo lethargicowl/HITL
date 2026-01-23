@@ -1,0 +1,4 @@
+prompt,video_url,context
+"Analyze the motion in this clip","https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4","Animation sample"
+"Check for frame skipping","https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4","High detail animation"
+"Rate the video quality","https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4","Action sequence"

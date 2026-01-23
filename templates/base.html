@@ -4,7 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}HITL Platform{% endblock %}</title>
-    <link rel="stylesheet" href="/static/css/styles.css">
+    <link rel="stylesheet" href="https://cdn.plyr.io/3.7.8/plyr.css" />
+    <link rel="stylesheet" href="/static/css/styles.css?v={{ range(1, 10000) | random }}">
 </head>
 <body>
     <!-- Skip to main content link for accessibility -->
@@ -32,6 +33,7 @@
         {% block content %}{% endblock %}
     </main>
 
+    <script src="https://cdn.plyr.io/3.7.8/plyr.js"></script>
     <script src="/static/js/app.js"></script>
     {% block scripts %}{% endblock %}
 </body>

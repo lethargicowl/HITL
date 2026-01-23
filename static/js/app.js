@@ -1072,6 +1072,9 @@ function displayRow(row) {
 
     document.getElementById('rowContent').innerHTML = contentHtml;
 
+    // Initialize video players
+    if (typeof initAllVideoPlayers === 'function') initAllVideoPlayers();
+
     // Load any media references asynchronously
     loadMediaReferences();
     document.getElementById('rowNumber').textContent = `Row #${row.row_index}`;
@@ -1604,7 +1607,7 @@ function renderMediaContent(value, fieldKey) {
         case 'video_data':
             return `
                 <div class="media-container media-video">
-                    <video controls preload="metadata">
+                    <video playsinline controls>
                         <source src="${escapeHtml(content.value)}">
                         Your browser does not support video playback.
                     </video>
@@ -1706,11 +1709,18 @@ async function loadMediaReferences() {
                 container.classList.add('media-image');
             } else if (info.mime_type.startsWith('video/')) {
                 container.innerHTML = `
-                    <video controls preload="metadata">
+                    <video playsinline controls>
                         <source src="${escapeHtml(mediaUrl)}" type="${escapeHtml(info.mime_type)}">
                         Your browser does not support video playback.
                     </video>`;
                 container.classList.add('media-video');
+                // The init function will pick this up later if it's called again, 
+                // OR we can manually init Plyr here if initAllVideoPlayers was already called.
+                // For simplicity, let's just let the global init function handle it or re-run it.
+                // However, initAllVideoPlayers runs once after render.
+                // We should probably just init Plyr on this specific element.
+                // But to be consistent with the "init all" pattern:
+                initAllVideoPlayers();
             } else if (info.mime_type.startsWith('audio/')) {
                 container.innerHTML = `
                     <audio controls preload="metadata">
@@ -1795,3 +1805,77 @@ function escapeHtml(text) {
     div.textContent = String(text);
     return div.innerHTML;
 }
+
+// ============== Video Player (Plyr) Integration ==============
+
+let activePlyr = null;
+
+function initAllVideoPlayers() {
+    // Destroy existing player if needed to prevent duplicates (though we usually clear content)
+    if (activePlyr) {
+        activePlyr.destroy();
+        activePlyr = null;
+    }
+
+    const videoElements = document.querySelectorAll('.media-video video');
+    if (videoElements.length > 0) {
+        // Initialize Plyr on the first video found (assuming one per row for now)
+        // For pairwise, we might have two, but let's start with basic support
+        // Actually, Plyr can handle multiple, but we need to track the "active" one for shortcuts
+        
+        videoElements.forEach(videoEl => {
+            const player = new Plyr(videoEl, {
+                controls: [
+                    'play-large', 'play', 'progress', 'current-time', 'duration', 
+                    'mute', 'volume', 'captions', 'settings', 'pip', 'airplay', 'fullscreen'
+                ],
+                speed: { selected: 1, options: [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2] },
+                keyboard: { focused: true, global: true }, // Enable global shortcuts for Plyr
+                tooltips: { controls: true, seek: true }
+            });
+
+            // If this is the first player, mark it as active for our custom shortcuts
+            if (!activePlyr) {
+                activePlyr = player;
+            }
+
+            // Custom Frame Stepping (using our own shortcuts since Plyr doesn't have frame step)
+            // We'll rely on the global key handler below which uses 'activePlyr'
+        });
+    }
+}
+
+// Helper to step frames on the active Plyr instance
+function stepVideoFrame(frames) {
+    if (!activePlyr) return;
+    
+    // Pause if playing
+    if (activePlyr.playing) activePlyr.pause();
+
+    const fps = 30; // Assumed FPS
+    const frameTime = 1 / fps;
+    const newTime = activePlyr.currentTime + (frames * frameTime);
+    
+    // Clamp to duration
+    activePlyr.currentTime = Math.max(0, Math.min(activePlyr.duration, newTime));
+}
+
+// Add global key listener for frame stepping (Arrow Left/Right)
+// We need to be careful not to conflict with the rating navigation (also Arrow Left/Right)
+// Strategy: If Shift is held, step frames. If not, use standard rating nav.
+// OR: Since the user complained about clicking, maybe standard arrows SHOULD control video if one exists?
+// Let's use Shift+Arrow for Frames, and maybe simple Arrow for small seek (Plyr default) or navigation?
+// The user said "can't forward it", implying standard seek was broken. Plyr fixes standard seek.
+// Let's map ',' and '.' to frame step (standard NLE shortcuts) as well.
+
+document.addEventListener('keydown', (e) => {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    if (!activePlyr) return;
+
+    // Frame stepping with < and > (which are , and .)
+    if (e.key === ',' || e.key === '<') {
+        stepVideoFrame(-1);
+    } else if (e.key === '.' || e.key === '>') {
+        stepVideoFrame(1);
+    }
+});
