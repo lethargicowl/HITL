@@ -39,6 +39,18 @@
         </div>
     </section>
 
+    <!-- Annotation Examples Section -->
+    <section class="section-card">
+        <div class="section-header">
+            <h2>Annotation Examples</h2>
+            <button class="btn-primary" onclick="showAddExampleModal()">+ Add Example</button>
+        </div>
+        <p class="section-description">Show raters examples of good (and bad) annotations to guide their work.</p>
+        <div class="examples-list" id="examplesList">
+            <p class="empty-hint">No examples yet. Add examples to help raters understand your expectations.</p>
+        </div>
+    </section>
+
     <!-- Datasets Section -->
     <section class="section-card">
         <div class="section-header">
@@ -235,6 +247,63 @@
         <div class="modal-actions">
             <button type="button" class="btn-secondary" onclick="hideQuickAddModal()">Cancel</button>
         </div>
+    </div>
+</div>
+
+<!-- Add/Edit Example Modal -->
+<div class="modal" id="exampleModal" style="display: none;">
+    <div class="modal-content modal-large">
+        <div class="modal-header">
+            <h2 id="exampleModalTitle">Add Annotation Example</h2>
+            <button class="modal-close" onclick="hideExampleModal()">&times;</button>
+        </div>
+        <form id="exampleForm">
+            <input type="hidden" id="editingExampleId" value="">
+
+            <div class="form-row">
+                <div class="form-group" style="flex: 2;">
+                    <label for="exampleTitle">Title *</label>
+                    <input type="text" id="exampleTitle" placeholder="e.g., High Quality Response" required>
+                </div>
+                <div class="form-group" style="flex: 1;">
+                    <label for="exampleType">Example Type</label>
+                    <select id="exampleType">
+                        <option value="positive">Good Example</option>
+                        <option value="negative">Bad Example</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Content (the item to rate)</label>
+                <div class="example-content-builder" id="exampleContentBuilder">
+                    <div class="content-field-row">
+                        <input type="text" placeholder="Field name (e.g., prompt)" class="content-field-key">
+                        <textarea placeholder="Field value" class="content-field-value" rows="2"></textarea>
+                        <button type="button" class="btn-icon" onclick="removeContentField(this)">🗑️</button>
+                    </div>
+                </div>
+                <button type="button" class="btn-secondary btn-small" onclick="addContentField()">+ Add Field</button>
+            </div>
+
+            <div class="form-group">
+                <label>Expected Response</label>
+                <div class="example-response-builder" id="exampleResponseBuilder">
+                    <!-- Will be populated based on evaluation type -->
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="exampleExplanation">Explanation (why this is the correct response)</label>
+                <textarea id="exampleExplanation" rows="3" placeholder="Explain why this rating is appropriate..."></textarea>
+            </div>
+
+            <div class="form-error" id="exampleError" style="display: none;"></div>
+            <div class="modal-actions">
+                <button type="button" class="btn-secondary" onclick="hideExampleModal()">Cancel</button>
+                <button type="submit" class="btn-primary" id="saveExampleBtn">Add Example</button>
+            </div>
+        </form>
     </div>
 </div>
 {% endblock %}
@@ -1191,6 +1260,402 @@ const originalDisplayEvalSettings = displayEvalSettings;
 displayEvalSettings = function() {
     originalDisplayEvalSettings();
     updateEvalModeUI();
+    loadExamples();
 };
+
+// ==================== Annotation Examples ====================
+
+let projectExamples = [];
+
+async function loadExamples() {
+    const container = document.getElementById('examplesList');
+
+    try {
+        const response = await fetch(`/api/projects/${PROJECT_ID}/examples`, { credentials: 'same-origin' });
+        if (!response.ok) throw new Error('Failed to load examples');
+
+        projectExamples = await response.json();
+        displayExamplesList();
+    } catch (error) {
+        console.error('Failed to load examples:', error);
+        container.innerHTML = '<p class="error">Failed to load examples</p>';
+    }
+}
+
+function displayExamplesList() {
+    const container = document.getElementById('examplesList');
+
+    if (projectExamples.length === 0) {
+        container.innerHTML = '<p class="empty-hint">No examples yet. Add examples to help raters understand your expectations.</p>';
+        return;
+    }
+
+    container.innerHTML = projectExamples.map(ex => `
+        <div class="example-item ${ex.is_positive ? 'example-positive' : 'example-negative'}">
+            <div class="example-badge">${ex.is_positive ? '✓ Good' : '✗ Bad'}</div>
+            <div class="example-info">
+                <strong>${escapeHtml(ex.title)}</strong>
+                ${ex.explanation ? `<p class="example-explanation">${escapeHtml(ex.explanation.substring(0, 100))}${ex.explanation.length > 100 ? '...' : ''}</p>` : ''}
+            </div>
+            <div class="example-actions">
+                <button class="btn-icon" onclick="editExample('${ex.id}')" title="Edit">✏️</button>
+                <button class="btn-icon btn-icon-danger" onclick="deleteExample('${ex.id}')" title="Delete">🗑️</button>
+            </div>
+        </div>
+    `).join('');
+}
+
+function showAddExampleModal(exampleId = null) {
+    document.getElementById('exampleModal').style.display = 'flex';
+    document.getElementById('exampleError').style.display = 'none';
+
+    // Reset content builder
+    const contentBuilder = document.getElementById('exampleContentBuilder');
+    contentBuilder.innerHTML = `
+        <div class="content-field-row">
+            <input type="text" placeholder="Field name (e.g., prompt)" class="content-field-key">
+            <textarea placeholder="Field value" class="content-field-value" rows="2"></textarea>
+            <button type="button" class="btn-icon" onclick="removeContentField(this)">🗑️</button>
+        </div>
+    `;
+
+    // Build response UI based on evaluation type
+    buildExampleResponseUI();
+
+    if (exampleId) {
+        const example = projectExamples.find(e => e.id === exampleId);
+        if (example) {
+            document.getElementById('exampleModalTitle').textContent = 'Edit Annotation Example';
+            document.getElementById('editingExampleId').value = exampleId;
+            document.getElementById('exampleTitle').value = example.title;
+            document.getElementById('exampleType').value = example.is_positive ? 'positive' : 'negative';
+            document.getElementById('exampleExplanation').value = example.explanation || '';
+            document.getElementById('saveExampleBtn').textContent = 'Save Changes';
+
+            // Populate content fields
+            populateContentFields(example.content);
+
+            // Populate response fields
+            populateResponseFields(example.example_response);
+        }
+    } else {
+        document.getElementById('exampleModalTitle').textContent = 'Add Annotation Example';
+        document.getElementById('editingExampleId').value = '';
+        document.getElementById('exampleTitle').value = '';
+        document.getElementById('exampleType').value = 'positive';
+        document.getElementById('exampleExplanation').value = '';
+        document.getElementById('saveExampleBtn').textContent = 'Add Example';
+    }
+}
+
+function hideExampleModal() {
+    document.getElementById('exampleModal').style.display = 'none';
+}
+
+function editExample(exampleId) {
+    showAddExampleModal(exampleId);
+}
+
+async function deleteExample(exampleId) {
+    if (!confirm('Delete this example?')) return;
+
+    try {
+        const response = await fetch(`/api/projects/${PROJECT_ID}/examples/${exampleId}`, {
+            method: 'DELETE',
+            credentials: 'same-origin'
+        });
+
+        if (!response.ok) throw new Error('Failed to delete example');
+
+        projectExamples = projectExamples.filter(e => e.id !== exampleId);
+        displayExamplesList();
+    } catch (error) {
+        alert('Failed to delete example: ' + error.message);
+    }
+}
+
+function addContentField() {
+    const builder = document.getElementById('exampleContentBuilder');
+    const row = document.createElement('div');
+    row.className = 'content-field-row';
+    row.innerHTML = `
+        <input type="text" placeholder="Field name" class="content-field-key">
+        <textarea placeholder="Field value" class="content-field-value" rows="2"></textarea>
+        <button type="button" class="btn-icon" onclick="removeContentField(this)">🗑️</button>
+    `;
+    builder.appendChild(row);
+}
+
+function removeContentField(btn) {
+    const row = btn.closest('.content-field-row');
+    const builder = document.getElementById('exampleContentBuilder');
+    if (builder.children.length > 1) {
+        row.remove();
+    }
+}
+
+function populateContentFields(content) {
+    const builder = document.getElementById('exampleContentBuilder');
+    builder.innerHTML = '';
+
+    const entries = Object.entries(content);
+    if (entries.length === 0) {
+        addContentField();
+        return;
+    }
+
+    entries.forEach(([key, value]) => {
+        const row = document.createElement('div');
+        row.className = 'content-field-row';
+        row.innerHTML = `
+            <input type="text" placeholder="Field name" class="content-field-key" value="${escapeHtml(key)}">
+            <textarea placeholder="Field value" class="content-field-value" rows="2">${escapeHtml(String(value))}</textarea>
+            <button type="button" class="btn-icon" onclick="removeContentField(this)">🗑️</button>
+        `;
+        builder.appendChild(row);
+    });
+}
+
+function buildExampleResponseUI() {
+    const builder = document.getElementById('exampleResponseBuilder');
+    const evalType = projectData.evaluation_type || 'rating';
+    const config = projectData.evaluation_config || {};
+
+    if (projectData.use_multi_questions && projectData.questions?.length > 0) {
+        // Multi-question mode: show response for each question
+        builder.innerHTML = projectData.questions.map(q => `
+            <div class="response-question-row" data-question-key="${q.key}">
+                <label>${escapeHtml(q.label)}</label>
+                ${buildQuestionResponseInput(q.question_type, q.config, q.key)}
+            </div>
+        `).join('');
+    } else {
+        // Single question mode
+        builder.innerHTML = buildSingleResponseInput(evalType, config);
+    }
+}
+
+function buildSingleResponseInput(evalType, config) {
+    if (evalType === 'rating') {
+        const min = config.min || 1;
+        const max = config.max || 5;
+        return `
+            <div class="response-rating">
+                <label>Rating (${min}-${max}):</label>
+                <input type="number" id="exampleRatingValue" min="${min}" max="${max}" value="${min}">
+            </div>
+        `;
+    } else if (evalType === 'binary') {
+        const options = config.options || [{ value: 'yes', label: 'Yes' }, { value: 'no', label: 'No' }];
+        return `
+            <div class="response-binary">
+                <label>Choice:</label>
+                <select id="exampleBinaryValue">
+                    ${options.map(o => `<option value="${escapeHtml(o.value)}">${escapeHtml(o.label)}</option>`).join('')}
+                </select>
+            </div>
+        `;
+    } else if (evalType === 'multi_label') {
+        const options = config.options || [];
+        return `
+            <div class="response-multi-label">
+                <label>Selected Labels:</label>
+                ${options.map(o => `
+                    <label class="checkbox-label">
+                        <input type="checkbox" name="exampleLabels" value="${escapeHtml(o.value)}">
+                        ${escapeHtml(o.label)}
+                    </label>
+                `).join('')}
+            </div>
+        `;
+    } else if (evalType === 'pairwise') {
+        return `
+            <div class="response-pairwise">
+                <label>Preferred:</label>
+                <select id="examplePairwiseValue">
+                    <option value="a_much_better">A Much Better</option>
+                    <option value="a_better">A Better</option>
+                    <option value="a_slightly_better">A Slightly Better</option>
+                    <option value="tie">Tie</option>
+                    <option value="b_slightly_better">B Slightly Better</option>
+                    <option value="b_better">B Better</option>
+                    <option value="b_much_better">B Much Better</option>
+                </select>
+            </div>
+        `;
+    }
+    return '<p>Configure evaluation type first</p>';
+}
+
+function buildQuestionResponseInput(qType, config, key) {
+    if (qType === 'rating') {
+        const min = config?.min || 1;
+        const max = config?.max || 5;
+        return `<input type="number" class="example-q-input" data-key="${key}" min="${min}" max="${max}" value="${min}">`;
+    } else if (qType === 'binary') {
+        const options = config?.options || [{ value: 'yes', label: 'Yes' }, { value: 'no', label: 'No' }];
+        return `<select class="example-q-input" data-key="${key}">
+            ${options.map(o => `<option value="${escapeHtml(o.value)}">${escapeHtml(o.label)}</option>`).join('')}
+        </select>`;
+    } else if (qType === 'multi_label') {
+        const options = config?.options || [];
+        return options.map(o => `
+            <label class="checkbox-label inline">
+                <input type="checkbox" class="example-q-checkbox" data-key="${key}" value="${escapeHtml(o.value)}">
+                ${escapeHtml(o.label)}
+            </label>
+        `).join('');
+    } else if (qType === 'text') {
+        return `<textarea class="example-q-input" data-key="${key}" rows="2" placeholder="Text response..."></textarea>`;
+    }
+    return '';
+}
+
+function populateResponseFields(response) {
+    if (projectData.use_multi_questions && projectData.questions?.length > 0) {
+        // Multi-question mode
+        projectData.questions.forEach(q => {
+            const qResponse = response[q.key];
+            if (!qResponse) return;
+
+            if (q.question_type === 'multi_label') {
+                const checkboxes = document.querySelectorAll(`.example-q-checkbox[data-key="${q.key}"]`);
+                const values = qResponse.value || [];
+                checkboxes.forEach(cb => {
+                    cb.checked = values.includes(cb.value);
+                });
+            } else {
+                const input = document.querySelector(`.example-q-input[data-key="${q.key}"]`);
+                if (input) input.value = qResponse.value || '';
+            }
+        });
+    } else {
+        // Single question mode
+        const evalType = projectData.evaluation_type || 'rating';
+        if (evalType === 'rating') {
+            const input = document.getElementById('exampleRatingValue');
+            if (input) input.value = response.rating || response.value || 1;
+        } else if (evalType === 'binary') {
+            const select = document.getElementById('exampleBinaryValue');
+            if (select) select.value = response.choice || response.value || '';
+        } else if (evalType === 'multi_label') {
+            const values = response.labels || response.value || [];
+            document.querySelectorAll('input[name="exampleLabels"]').forEach(cb => {
+                cb.checked = values.includes(cb.value);
+            });
+        } else if (evalType === 'pairwise') {
+            const select = document.getElementById('examplePairwiseValue');
+            if (select) select.value = response.choice || response.value || 'tie';
+        }
+    }
+}
+
+function collectExampleContent() {
+    const content = {};
+    document.querySelectorAll('.content-field-row').forEach(row => {
+        const key = row.querySelector('.content-field-key').value.trim();
+        const value = row.querySelector('.content-field-value').value;
+        if (key) content[key] = value;
+    });
+    return content;
+}
+
+function collectExampleResponse() {
+    const response = {};
+
+    if (projectData.use_multi_questions && projectData.questions?.length > 0) {
+        projectData.questions.forEach(q => {
+            if (q.question_type === 'multi_label') {
+                const checkboxes = document.querySelectorAll(`.example-q-checkbox[data-key="${q.key}"]:checked`);
+                response[q.key] = { value: Array.from(checkboxes).map(cb => cb.value) };
+            } else {
+                const input = document.querySelector(`.example-q-input[data-key="${q.key}"]`);
+                if (input) {
+                    let val = input.value;
+                    if (q.question_type === 'rating') val = parseInt(val) || 1;
+                    response[q.key] = { value: val };
+                }
+            }
+        });
+    } else {
+        const evalType = projectData.evaluation_type || 'rating';
+        if (evalType === 'rating') {
+            response.rating = parseInt(document.getElementById('exampleRatingValue')?.value) || 1;
+        } else if (evalType === 'binary') {
+            response.choice = document.getElementById('exampleBinaryValue')?.value || '';
+        } else if (evalType === 'multi_label') {
+            const checked = document.querySelectorAll('input[name="exampleLabels"]:checked');
+            response.labels = Array.from(checked).map(cb => cb.value);
+        } else if (evalType === 'pairwise') {
+            response.choice = document.getElementById('examplePairwiseValue')?.value || 'tie';
+        }
+    }
+
+    return response;
+}
+
+document.getElementById('exampleForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const errorEl = document.getElementById('exampleError');
+    errorEl.style.display = 'none';
+
+    const editingId = document.getElementById('editingExampleId').value;
+    const isEdit = !!editingId;
+
+    const content = collectExampleContent();
+    if (Object.keys(content).length === 0) {
+        errorEl.textContent = 'Please add at least one content field';
+        errorEl.style.display = 'block';
+        return;
+    }
+
+    const exampleData = {
+        title: document.getElementById('exampleTitle').value.trim(),
+        content: content,
+        example_response: collectExampleResponse(),
+        explanation: document.getElementById('exampleExplanation').value.trim() || null,
+        is_positive: document.getElementById('exampleType').value === 'positive'
+    };
+
+    try {
+        let response;
+        if (isEdit) {
+            response = await fetch(`/api/projects/${PROJECT_ID}/examples/${editingId}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(exampleData),
+                credentials: 'same-origin'
+            });
+        } else {
+            response = await fetch(`/api/projects/${PROJECT_ID}/examples`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(exampleData),
+                credentials: 'same-origin'
+            });
+        }
+
+        if (!response.ok) {
+            const data = await response.json();
+            throw new Error(data.detail || 'Failed to save example');
+        }
+
+        const savedExample = await response.json();
+
+        if (isEdit) {
+            const idx = projectExamples.findIndex(e => e.id === editingId);
+            if (idx >= 0) projectExamples[idx] = savedExample;
+        } else {
+            projectExamples.push(savedExample);
+        }
+
+        hideExampleModal();
+        displayExamplesList();
+
+    } catch (error) {
+        errorEl.textContent = error.message;
+        errorEl.style.display = 'block';
+    }
+});
 </script>
 {% endblock %}

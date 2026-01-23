@@ -60,6 +60,7 @@ class Project(Base):
     assignments = relationship("ProjectAssignment", back_populates="project", cascade="all, delete-orphan")
     questions = relationship("EvaluationQuestion", back_populates="project", cascade="all, delete-orphan", order_by="EvaluationQuestion.order")
     media_files = relationship("MediaFile", back_populates="project", cascade="all, delete-orphan")
+    examples = relationship("AnnotationExample", back_populates="project", cascade="all, delete-orphan", order_by="AnnotationExample.order")
 
 
 class MediaFile(Base):
@@ -98,6 +99,23 @@ class EvaluationQuestion(Base):
     __table_args__ = (UniqueConstraint('project_id', 'key', name='unique_question_key_per_project'),)
 
     project = relationship("Project", back_populates="questions")
+
+
+class AnnotationExample(Base):
+    """Example annotation to guide raters."""
+    __tablename__ = "annotation_examples"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    project_id = Column(String, ForeignKey("projects.id"), nullable=False)
+    title = Column(String, nullable=False)  # Example title (e.g., "High Quality Response")
+    content = Column(Text, nullable=False)  # JSON: the example data item
+    example_response = Column(Text, nullable=False)  # JSON: the correct/expected response
+    explanation = Column(Text, nullable=True)  # Why this is the correct answer
+    is_positive = Column(Boolean, default=True)  # True = good example, False = bad example
+    order = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    project = relationship("Project", back_populates="examples")
 
 
 class ProjectAssignment(Base):
@@ -437,6 +455,49 @@ class EvaluationQuestionResponse(BaseModel):
 class QuestionsReorderRequest(BaseModel):
     """Request to reorder questions."""
     question_ids: List[str]  # Ordered list of question IDs
+
+
+# --- Annotation Example Schemas ---
+
+class AnnotationExampleCreate(BaseModel):
+    """Create a new annotation example."""
+    title: str = Field(min_length=1, max_length=200)
+    content: dict  # The example data item (like a DataRow content)
+    example_response: dict  # The expected/correct response
+    explanation: Optional[str] = None
+    is_positive: bool = True  # Good example (True) or bad example (False)
+    order: Optional[int] = None
+
+
+class AnnotationExampleUpdate(BaseModel):
+    """Update an annotation example."""
+    title: Optional[str] = None
+    content: Optional[dict] = None
+    example_response: Optional[dict] = None
+    explanation: Optional[str] = None
+    is_positive: Optional[bool] = None
+    order: Optional[int] = None
+
+
+class AnnotationExampleResponse(BaseModel):
+    """Response for an annotation example."""
+    id: str
+    project_id: str
+    title: str
+    content: dict
+    example_response: dict
+    explanation: Optional[str] = None
+    is_positive: bool = True
+    order: int = 0
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class ExamplesReorderRequest(BaseModel):
+    """Request to reorder examples."""
+    example_ids: List[str]
 
 
 class ProjectWithQuestionsResponse(BaseModel):

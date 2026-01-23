@@ -215,6 +215,11 @@ async function loadSession(sessionId) {
             }
         }
 
+        // Load annotation examples (if function exists - defined in rating.html)
+        if (typeof loadAnnotationExamples === 'function') {
+            loadAnnotationExamples(currentSession.project.id);
+        }
+
         // Render the appropriate evaluation form
         renderEvaluationForm();
 

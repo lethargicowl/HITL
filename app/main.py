@@ -5,7 +5,7 @@ from fastapi.responses import RedirectResponse
 import os
 
 from .database import init_db, get_db
-from .routers import uploads, ratings, exports, auth, projects, users, questions, media
+from .routers import uploads, ratings, exports, auth, projects, users, questions, media, examples
 from .dependencies import get_current_user_optional, get_current_user
 from .models import User
 
@@ -30,6 +30,7 @@ app.include_router(uploads.router)
 app.include_router(ratings.router)
 app.include_router(exports.router)
 app.include_router(media.router)
+app.include_router(examples.router)
 
 
 @app.on_event("startup")

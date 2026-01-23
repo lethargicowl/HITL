@@ -1,6 +1,6 @@
 # HITL Platform - Implementation State
 
-## Current State: Phase 2A Complete
+## Current State: Phase 2B In Progress
 
 ### What's Built
 
@@ -33,6 +33,13 @@
 - Confidence levels (much/clearly/slightly better)
 - Side-by-side display with keyboard shortcuts
 
+#### Annotation Examples
+- Create good/bad example annotations for raters
+- Examples management UI in project settings
+- Slide-out examples panel in rating interface
+- Keyboard shortcut 'E' to toggle examples panel
+- Support for both single-question and multi-question response formats
+
 ### Tech Stack
 - Backend: FastAPI + SQLAlchemy + SQLite
 - Frontend: Jinja2 templates + vanilla JS
@@ -49,6 +56,7 @@ HITL/
 │   ├── models.py
 │   ├── routers/
 │   │   ├── auth.py
+│   │   ├── examples.py      ← NEW
 │   │   ├── exports.py
 │   │   ├── media.py
 │   │   ├── projects.py
@@ -87,15 +95,20 @@ HITL/
 | 2.3 Multi-Modal Data Support | ✅ Complete | Images, video, audio, PDFs, YouTube/Vimeo embeds |
 | 2.4 Multiple Questions Per Item | ✅ Complete | Multi-question mode with UI for adding/editing questions |
 
+### Phase 2B: Quality & Metrics
+
+| Task | Status | Description |
+|------|--------|-------------|
+| 2.5 Example Annotations | ✅ Complete | Good/bad examples with expected responses, slide-out panel |
+
 ---
 
 ## Next Priority Tasks
 
-### Phase 2B: Quality & Metrics
+### Phase 2B: Quality & Metrics (Continued)
 
 | Task | Complexity | Impact | Description |
 |------|------------|--------|-------------|
-| 2.5 Example Annotations | Medium | High | Show raters example ratings to guide their work |
 | 2.6 Gold Questions | Medium | High | Quality control with known-answer items |
 | 2.7 Agreement Metrics | Medium | High | Calculate inter-rater agreement (Kappa, ICC) |
 | 2.8 Real-Time Dashboard | Medium | Medium | Progress and quality monitoring |
@@ -113,48 +126,40 @@ HITL/
 
 ## Feature Details
 
-### Task 2.5: Example Annotations (Next Up)
-
-**Goal**: Show raters example ratings to guide their work.
-
-#### Types of Examples
-1. **Project-Level Examples**: General examples shown in instructions
-2. **Item-Level Examples**: Specific examples shown alongside certain items
-3. **Inline Guidance**: Tooltips/hints for specific question types
-
-#### Model
-```python
-class AnnotationExample(Base):
-    __tablename__ = "annotation_examples"
-    id = Column(String, primary_key=True)
-    project_id = Column(String, ForeignKey("projects.id"))
-    question_id = Column(String, ForeignKey("evaluation_questions.id"), nullable=True)
-    title = Column(String, nullable=False)
-    content = Column(Text, nullable=False)  # JSON: the example data item
-    example_response = Column(Text, nullable=False)  # JSON: the correct/expected response
-    explanation = Column(Text, nullable=True)  # Why this is correct
-    is_positive = Column(Boolean, default=True)  # Good example vs bad example
-    order = Column(Integer, default=0)
-```
-
-#### UI Components
-1. Examples Panel (collapsible sidebar)
-2. Quick Reference Card (floating)
-3. Comparison View (side-by-side)
-4. Keyboard Shortcut: Press 'E' to toggle examples
-
----
-
-### Task 2.6: Gold Questions / Quality Control
+### Task 2.6: Gold Questions / Quality Control (Next Up)
 
 **Goal**: Validate rater quality with known-answer items.
 
 #### Features
-- Upload gold items separately or mark in CSV
+- Upload gold items separately or mark in CSV (`is_gold` column)
 - Configurable % of gold items shown (e.g., 10%)
 - Auto-score when rater submits
+- Track rater accuracy over time
 - Alert requester if rater accuracy drops below threshold
 - Option to pause rater access if quality too low
+
+#### Model
+```python
+class GoldItem(Base):
+    __tablename__ = "gold_items"
+    id = Column(String, primary_key=True)
+    project_id = Column(String, ForeignKey("projects.id"))
+    data_row_id = Column(String, ForeignKey("data_rows.id"), nullable=True)
+    content = Column(Text, nullable=False)  # JSON: the item content
+    expected_response = Column(Text, nullable=False)  # JSON: correct answer
+    tolerance = Column(Float, default=0)  # Acceptable deviation for ratings
+    created_at = Column(DateTime)
+
+class RaterAccuracy(Base):
+    __tablename__ = "rater_accuracy"
+    id = Column(String, primary_key=True)
+    project_id = Column(String, ForeignKey("projects.id"))
+    rater_id = Column(String, ForeignKey("users.id"))
+    gold_attempts = Column(Integer, default=0)
+    gold_correct = Column(Integer, default=0)
+    accuracy = Column(Float, default=0)
+    last_checked = Column(DateTime)
+```
 
 ---
 
@@ -198,3 +203,12 @@ http://localhost:8000/docs
 ### Test Data Files
 - `test_media_data.csv` - Pairwise comparison with images
 - `test_media_mixed.csv` - Mixed media types (images, YouTube, Vimeo)
+
+### New API Endpoints (Task 2.5)
+- `GET /api/projects/{id}/examples` - List all examples
+- `POST /api/projects/{id}/examples` - Create example
+- `GET /api/projects/{id}/examples/{eid}` - Get single example
+- `PATCH /api/projects/{id}/examples/{eid}` - Update example
+- `DELETE /api/projects/{id}/examples/{eid}` - Delete example
+- `POST /api/projects/{id}/examples/bulk` - Create multiple examples
+- `POST /api/projects/{id}/examples/reorder` - Reorder examples
