@@ -7,6 +7,12 @@
     <link rel="stylesheet" href="/static/css/styles.css">
 </head>
 <body>
+    <!-- Skip to main content link for accessibility -->
+    <a href="#main-content" class="skip-link">Skip to main content</a>
+
+    <!-- Toast notification container -->
+    <div id="toast-container" class="toast-container" aria-live="polite"></div>
+
     {% if current_user %}
     <nav class="top-nav">
         <div class="nav-brand">
@@ -22,9 +28,9 @@
     </nav>
     {% endif %}
 
-    <div class="container">
+    <main id="main-content" class="container">
         {% block content %}{% endblock %}
-    </div>
+    </main>
 
     <script src="/static/js/app.js"></script>
     {% block scripts %}{% endblock %}

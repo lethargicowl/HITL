@@ -1,3 +1,121 @@
+// ============== Toast Notification System ==============
+
+function showToast(message, type = 'info', title = null, duration = 4000) {
+    let container = document.getElementById('toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'toast-container';
+        container.className = 'toast-container';
+        document.body.appendChild(container);
+    }
+
+    const icons = {
+        success: '✓',
+        error: '✕',
+        warning: '⚠',
+        info: 'ℹ'
+    };
+
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    toast.setAttribute('role', 'alert');
+    toast.innerHTML = `
+        <span class="toast-icon">${icons[type] || icons.info}</span>
+        <div class="toast-content">
+            ${title ? `<div class="toast-title">${escapeHtml(title)}</div>` : ''}
+            <div class="toast-message">${escapeHtml(message)}</div>
+        </div>
+        <button class="toast-close" aria-label="Close">&times;</button>
+    `;
+
+    toast.querySelector('.toast-close').addEventListener('click', () => {
+        hideToast(toast);
+    });
+
+    container.appendChild(toast);
+
+    if (duration > 0) {
+        setTimeout(() => hideToast(toast), duration);
+    }
+
+    return toast;
+}
+
+function hideToast(toast) {
+    if (!toast || toast.classList.contains('toast-hiding')) return;
+    toast.classList.add('toast-hiding');
+    setTimeout(() => toast.remove(), 300);
+}
+
+// Convenience functions
+const toast = {
+    success: (msg, title) => showToast(msg, 'success', title),
+    error: (msg, title) => showToast(msg, 'error', title || 'Error', 6000),
+    warning: (msg, title) => showToast(msg, 'warning', title),
+    info: (msg, title) => showToast(msg, 'info', title)
+};
+
+// ============== Loading State Helpers ==============
+
+function setButtonLoading(button, loading = true) {
+    if (!button) return;
+    if (loading) {
+        button.classList.add('btn-loading');
+        button.disabled = true;
+        button.dataset.originalText = button.textContent;
+    } else {
+        button.classList.remove('btn-loading');
+        button.disabled = false;
+        if (button.dataset.originalText) {
+            button.textContent = button.dataset.originalText;
+        }
+    }
+}
+
+function showLoadingOverlay(message = 'Loading...') {
+    let overlay = document.getElementById('loading-overlay');
+    if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'loading-overlay';
+        overlay.className = 'loading-overlay';
+        overlay.innerHTML = `
+            <div class="spinner spinner-lg"></div>
+            <div class="loading-overlay-text">${escapeHtml(message)}</div>
+        `;
+        document.body.appendChild(overlay);
+    } else {
+        overlay.querySelector('.loading-overlay-text').textContent = message;
+        overlay.style.display = 'flex';
+    }
+}
+
+function hideLoadingOverlay() {
+    const overlay = document.getElementById('loading-overlay');
+    if (overlay) {
+        overlay.style.display = 'none';
+    }
+}
+
+// ============== Unsaved Changes Warning ==============
+
+let hasUnsavedChanges = false;
+
+function setUnsavedChanges(unsaved) {
+    hasUnsavedChanges = unsaved;
+    const indicator = document.getElementById('unsaved-indicator');
+    if (indicator) {
+        indicator.style.display = unsaved ? 'inline-flex' : 'none';
+    }
+}
+
+window.addEventListener('beforeunload', (e) => {
+    if (hasUnsavedChanges) {
+        e.preventDefault();
+        e.returnValue = 'You have unsaved changes. Are you sure you want to leave?';
+        return e.returnValue;
+    }
+});
+
 // ============== Auth & UI Functions ==============
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -178,6 +296,14 @@ function initRating(sessionId) {
 
     // Set up export
     document.getElementById('exportBtn').addEventListener('click', () => exportSession(sessionId));
+
+    // Track unsaved changes on comment input
+    const commentField = document.getElementById('comment');
+    if (commentField) {
+        commentField.addEventListener('input', () => {
+            setUnsavedChanges(true);
+        });
+    }
 
     // Keyboard shortcuts
     document.addEventListener('keydown', handleKeyboard);
@@ -776,13 +902,30 @@ function clearMultiQuestionForm() {
 }
 
 function setupStarListeners() {
+    const starContainer = document.getElementById('starRating');
     const stars = document.querySelectorAll('#starRating .star');
-    stars.forEach(star => {
+
+    // Add ARIA attributes for accessibility
+    if (starContainer) {
+        starContainer.setAttribute('role', 'radiogroup');
+        starContainer.setAttribute('aria-label', 'Rating');
+    }
+
+    stars.forEach((star, index) => {
+        const value = parseInt(star.dataset.value);
+
+        // Add ARIA attributes
+        star.setAttribute('role', 'radio');
+        star.setAttribute('aria-checked', 'false');
+        star.setAttribute('aria-label', `${value} star${value > 1 ? 's' : ''}`);
+        star.setAttribute('tabindex', index === 0 ? '0' : '-1');
+
         star.addEventListener('click', () => {
-            selectedRating = parseInt(star.dataset.value);
-            currentResponse = { value: selectedRating };
-            updateStars();
-            updateButtons();
+            selectStar(value);
+        });
+
+        star.addEventListener('keydown', (e) => {
+            handleStarKeydown(e, stars, index);
         });
 
         star.addEventListener('mouseenter', () => {
@@ -796,6 +939,57 @@ function setupStarListeners() {
             stars.forEach(s => s.classList.remove('hover'));
         });
     });
+}
+
+function selectStar(value) {
+    selectedRating = value;
+    currentResponse = { value: selectedRating };
+    setUnsavedChanges(true);
+    updateStars();
+    updateButtons();
+
+    // Update ARIA checked state
+    document.querySelectorAll('#starRating .star').forEach(s => {
+        s.setAttribute('aria-checked', parseInt(s.dataset.value) === value ? 'true' : 'false');
+    });
+}
+
+function handleStarKeydown(e, stars, currentIndex) {
+    let newIndex = currentIndex;
+
+    switch (e.key) {
+        case 'ArrowRight':
+        case 'ArrowUp':
+            e.preventDefault();
+            newIndex = Math.min(currentIndex + 1, stars.length - 1);
+            break;
+        case 'ArrowLeft':
+        case 'ArrowDown':
+            e.preventDefault();
+            newIndex = Math.max(currentIndex - 1, 0);
+            break;
+        case 'Home':
+            e.preventDefault();
+            newIndex = 0;
+            break;
+        case 'End':
+            e.preventDefault();
+            newIndex = stars.length - 1;
+            break;
+        case ' ':
+        case 'Enter':
+            e.preventDefault();
+            selectStar(parseInt(stars[currentIndex].dataset.value));
+            return;
+        default:
+            return;
+    }
+
+    // Move focus and update tabindex
+    stars.forEach((s, i) => {
+        s.setAttribute('tabindex', i === newIndex ? '0' : '-1');
+    });
+    stars[newIndex].focus();
 }
 
 async function loadRows(sessionId) {
@@ -1093,10 +1287,32 @@ function updateProgress() {
     const rated = currentSession.rated_count;
     const total = currentSession.row_count;
     const percent = total > 0 ? Math.round((rated / total) * 100) : 0;
+    const isComplete = rated >= total && total > 0;
 
     document.getElementById('progressText').textContent = `${rated} / ${total} rated`;
-    document.getElementById('progressPercent').textContent = `${percent}%`;
+    document.getElementById('progressPercent').textContent = isComplete ? 'Complete!' : `${percent}%`;
     document.getElementById('progressFill').style.width = `${percent}%`;
+
+    // Add completion class for styling
+    const progressSection = document.querySelector('.progress-section');
+    if (progressSection) {
+        progressSection.classList.toggle('progress-complete', isComplete);
+    }
+
+    // Show completion message if all done
+    const completionMsg = document.getElementById('completion-message');
+    if (isComplete && !completionMsg) {
+        const msg = document.createElement('div');
+        msg.id = 'completion-message';
+        msg.className = 'completion-message';
+        msg.textContent = 'All items rated! Great work.';
+        const progressEl = document.querySelector('.progress-section');
+        if (progressEl) {
+            progressEl.parentNode.insertBefore(msg, progressEl.nextSibling);
+        }
+    } else if (!isComplete && completionMsg) {
+        completionMsg.remove();
+    }
 }
 
 function updateNavigation() {
@@ -1143,6 +1359,12 @@ async function saveRating(goNext) {
         requestBody.response = currentResponse;
     }
 
+    // Show loading state on save buttons
+    const saveBtn = document.getElementById('saveBtn');
+    const saveNextBtn = document.getElementById('saveNextBtn');
+    setButtonLoading(saveBtn, true);
+    setButtonLoading(saveNextBtn, true);
+
     try {
         const response = await fetch('/api/ratings', {
             method: 'POST',
@@ -1154,6 +1376,9 @@ async function saveRating(goNext) {
         if (!response.ok) throw new Error('Failed to save rating');
 
         const savedRating = await response.json();
+
+        // Clear unsaved changes flag
+        setUnsavedChanges(false);
 
         if (!row.my_rating) {
             currentSession.rated_count++;
@@ -1170,6 +1395,11 @@ async function saveRating(goNext) {
 
         updateProgress();
 
+        // Show success toast (only if not going next, otherwise it's implicit)
+        if (!goNext) {
+            toast.success('Rating saved successfully');
+        }
+
         if (goNext && currentPage < totalRows) {
             navigateRow(1);
         } else if (goNext && currentFilter === 'unrated') {
@@ -1181,7 +1411,13 @@ async function saveRating(goNext) {
 
     } catch (error) {
         console.error('Failed to save rating:', error);
-        alert('Failed to save rating. Please try again.');
+        toast.error('Failed to save rating. Please try again.');
+    } finally {
+        // Reset button loading states
+        const saveBtn = document.getElementById('saveBtn');
+        const saveNextBtn = document.getElementById('saveNextBtn');
+        setButtonLoading(saveBtn, false);
+        setButtonLoading(saveNextBtn, false);
     }
 }
 
