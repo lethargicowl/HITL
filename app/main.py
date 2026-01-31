@@ -1,27 +1,38 @@
-from fastapi import FastAPI, Request, Depends
+from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
-from fastapi.responses import RedirectResponse
+from fastapi.responses import FileResponse
+from fastapi.middleware.cors import CORSMiddleware
 import os
 
-from .database import init_db, get_db
+from .database import init_db
 from .routers import uploads, ratings, exports, auth, projects, users, questions, media, examples
-from .dependencies import get_current_user_optional, get_current_user
-from .models import User
 
 # Initialize FastAPI app
 app = FastAPI(title="HITL Rating Platform", version="2.0.0")
 
+# Add CORS middleware for development
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # Get base directory
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))
 
-# Mount static files
-app.mount("/static", StaticFiles(directory=os.path.join(BASE_DIR, "static")), name="static")
+# React frontend build directory
+REACT_BUILD_DIR = os.path.join(BASE_DIR, "frontend", "dist")
 
-# Templates
-templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
+# Mount React assets
+app.mount("/assets", StaticFiles(directory=os.path.join(REACT_BUILD_DIR, "assets")), name="react-assets")
 
-# Include routers
+@app.get("/vite.svg")
+async def serve_vite_svg():
+    return FileResponse(os.path.join(REACT_BUILD_DIR, "vite.svg"))
+
+# Include API routers
 app.include_router(auth.router)
 app.include_router(projects.router)
 app.include_router(questions.router)
@@ -39,79 +50,55 @@ def startup():
     init_db()
 
 
-# ==================== Page Routes ====================
+# Helper function to serve React SPA
+def serve_react_spa():
+    """Serve the React SPA index.html."""
+    return FileResponse(os.path.join(REACT_BUILD_DIR, "index.html"))
+
+
+# ==================== React SPA Routes ====================
 
 @app.get("/")
-async def home(request: Request, current_user: User = Depends(get_current_user_optional)):
-    """Landing page - redirect to dashboard if logged in."""
-    if current_user:
-        return RedirectResponse(url="/dashboard", status_code=302)
-    return RedirectResponse(url="/login", status_code=302)
-
+async def home():
+    """Serve React SPA."""
+    return serve_react_spa()
 
 @app.get("/login")
-async def login_page(request: Request, current_user: User = Depends(get_current_user_optional)):
-    """Login page."""
-    if current_user:
-        return RedirectResponse(url="/dashboard", status_code=302)
-    return templates.TemplateResponse("auth/login.html", {"request": request})
-
+async def login_page():
+    """Serve React SPA."""
+    return serve_react_spa()
 
 @app.get("/register")
-async def register_page(request: Request, current_user: User = Depends(get_current_user_optional)):
-    """Registration page."""
-    if current_user:
-        return RedirectResponse(url="/dashboard", status_code=302)
-    return templates.TemplateResponse("auth/register.html", {"request": request})
-
+async def register_page():
+    """Serve React SPA."""
+    return serve_react_spa()
 
 @app.get("/dashboard")
-async def dashboard(request: Request, current_user: User = Depends(get_current_user)):
-    """Dashboard - role-specific."""
-    if current_user.role == "requester":
-        return templates.TemplateResponse("requester/dashboard.html", {
-            "request": request,
-            "current_user": current_user
-        })
-    else:
-        return templates.TemplateResponse("rater/dashboard.html", {
-            "request": request,
-            "current_user": current_user
-        })
+async def dashboard():
+    """Serve React SPA."""
+    return serve_react_spa()
 
+@app.get("/requester/dashboard")
+async def requester_dashboard():
+    """Serve React SPA."""
+    return serve_react_spa()
 
-@app.get("/projects/{project_id}")
-async def project_detail(request: Request, project_id: str, current_user: User = Depends(get_current_user)):
-    """Project detail page - role-specific."""
-    if current_user.role == "requester":
-        return templates.TemplateResponse("requester/project_detail.html", {
-            "request": request,
-            "current_user": current_user,
-            "project_id": project_id
-        })
-    else:
-        return templates.TemplateResponse("rater/project_sessions.html", {
-            "request": request,
-            "current_user": current_user,
-            "project_id": project_id
-        })
+@app.get("/requester/projects/{project_id}")
+async def requester_project_detail(project_id: str):
+    """Serve React SPA."""
+    return serve_react_spa()
 
+@app.get("/rater/dashboard")
+async def rater_dashboard():
+    """Serve React SPA."""
+    return serve_react_spa()
 
 @app.get("/projects/{project_id}/rate")
-async def project_rate(request: Request, project_id: str, current_user: User = Depends(get_current_user)):
-    """Project sessions page for raters."""
-    return templates.TemplateResponse("rater/project_sessions.html", {
-        "request": request,
-        "current_user": current_user,
-        "project_id": project_id
-    })
+async def project_rate(project_id: str):
+    """Serve React SPA."""
+    return serve_react_spa()
 
-
-@app.get("/rate/{session_id}")
-async def rating_page(request: Request, session_id: str, current_user: User = Depends(get_current_user)):
-    """Render the rating page for a session."""
-    return templates.TemplateResponse("rating.html", {
-        "request": request,
-        "current_user": current_user,
-        "session_id": session_id
-    })
+@app.get("/sessions/{session_id}/rate")
+async def session_rate(session_id: str):
+    """Serve React SPA."""
+    return serve_react_spa()

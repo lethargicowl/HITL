@@ -4,18 +4,33 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-HITL (Human-in-the-Loop) Platform is a web-based system for collecting human ratings on datasets. Requesters create projects and upload CSV/Excel files, assign raters, and export results. Raters evaluate items using configurable evaluation types with optional comments.
+HITL (Human-in-the-Loop) Platform is a web-based system for collecting human ratings on datasets. Requesters create projects and upload CSV/Excel files, assign raters, and export results. Raters evaluate items using configurable evaluation questions with optional comments.
 
 ## Commands
 
-### Run Development Server
+### Run Development Server (Backend)
 ```bash
 python3 -m uvicorn app.main:app --reload --port 8000
 ```
 
-### Install Dependencies
+### Run Frontend Dev Server (for development)
+```bash
+cd frontend && npm run dev
+```
+
+### Build Frontend
+```bash
+cd frontend && npm run build
+```
+
+### Install Backend Dependencies
 ```bash
 pip install -r requirements.txt
+```
+
+### Install Frontend Dependencies
+```bash
+cd frontend && npm install
 ```
 
 ### Reset Database
@@ -28,44 +43,53 @@ rm data/hitl.db
 - Application: http://localhost:8000
 - API Docs (Swagger): http://localhost:8000/docs
 - API Docs (ReDoc): http://localhost:8000/redoc
+- Frontend Dev: http://localhost:3000 (when running npm run dev)
 
 ## Architecture
 
 ### Backend (FastAPI + SQLite)
 ```
-app/main.py           → FastAPI app, static files, templates
+app/main.py           → FastAPI app, serves React SPA
 app/models.py         → SQLAlchemy ORM models + Pydantic schemas
 app/database.py       → DB engine and session management
 app/dependencies.py   → Auth middleware, role-based access
 app/routers/          → API endpoints
   ├── auth.py         → register, login, logout, me
   ├── projects.py     → CRUD, assign/remove raters
-  ├── questions.py    → Multi-question CRUD
+  ├── questions.py    → Question CRUD
   ├── uploads.py      → File upload
   ├── ratings.py      → Create/update ratings
   ├── exports.py      → Excel/CSV download
   ├── users.py        → List raters
-  └── media.py        → Media file upload/serve
+  ├── media.py        → Media file upload/serve
+  └── examples.py     → Annotation examples CRUD
 app/services/
   ├── auth_service.py → Password hashing, session management
   ├── excel_parser.py → CSV/Excel parsing
   └── media_service.py → Media storage abstraction
 ```
 
-### Frontend (Jinja2 + Vanilla JS)
+### Frontend (React + TypeScript + Vite)
 ```
-templates/
-  ├── base.html              → Layout with navigation
-  ├── requester/
-  │   ├── dashboard.html     → Project list
-  │   └── project_detail.html → Project settings, questions, datasets
-  ├── rater/
-  │   ├── dashboard.html     → Assigned projects
-  │   └── project_sessions.html → Sessions to rate
-  └── rating.html            → Main evaluation interface
-static/
-  ├── js/app.js              → All client-side logic
-  └── css/styles.css         → Styling
+frontend/
+  ├── src/
+  │   ├── api/           → Axios API client and endpoints
+  │   ├── components/    → Reusable UI components
+  │   │   ├── common/    → Button, Modal, Input, Card, etc.
+  │   │   ├── layout/    → Header, MainLayout
+  │   │   ├── auth/      → LoginForm, RegisterForm
+  │   │   ├── project/   → ProjectCard, SessionList, QuestionList, etc.
+  │   │   ├── evaluation/→ StarRating, BinaryChoice, MultiLabelSelect, etc.
+  │   │   ├── media/     → ImageViewer, VideoPlayer, AudioPlayer, etc.
+  │   │   └── examples/  → ExamplesPanel
+  │   ├── contexts/      → AuthContext, ToastContext
+  │   ├── hooks/         → React Query hooks for data fetching
+  │   ├── pages/         → Page components (routes)
+  │   ├── types/         → TypeScript interfaces
+  │   └── utils/         → Helper functions
+  ├── package.json
+  ├── vite.config.ts
+  └── tailwind.config.js
 ```
 
 ### Database Models
@@ -77,14 +101,16 @@ static/
 - **Rating**: id, data_row_id, session_id, rater_id, rating_value, response (JSON), comment, time_spent_ms
 - **ProjectAssignment**: project_id, rater_id
 - **MediaFile**: id, project_id, filename, original_name, mime_type, size_bytes, storage_path
+- **AnnotationExample**: id, project_id, title, content, response, explanation, order
 - **UserSession**: id, user_id, expires_at
 
 ### Data Flow
-1. Requester creates project → configures evaluation (single or multi-question)
-2. Requester uploads CSV/Excel → rows stored as JSON in DataRow
-3. Requester assigns raters to project via ProjectAssignment
-4. Raters see assigned projects → rate items → stored in Rating.response
-5. Requester exports results as Excel/CSV with per-rater columns
+1. Requester creates project with name/description
+2. Requester adds evaluation questions (rating, binary, multi-label, text, etc.)
+3. Requester uploads CSV/Excel → rows stored as JSON in DataRow
+4. Requester assigns raters to project via ProjectAssignment
+5. Raters see assigned projects → rate items → stored in Rating.response
+6. Requester exports results as Excel/CSV with per-rater columns
 
 ## API Structure
 
@@ -95,33 +121,32 @@ static/
 | /api/projects/{id}/questions | questions.py | Question CRUD, bulk create, reorder |
 | /api/projects/{id}/upload | uploads.py | File upload |
 | /api/projects/{id}/media | media.py | Media file upload |
+| /api/projects/{id}/examples | examples.py | Annotation examples CRUD |
 | /api/media/{id} | media.py | Serve/delete media files |
 | /api/sessions | uploads.py, ratings.py | Session management, get rows |
 | /api/ratings | ratings.py | Create/update ratings |
 | /api/sessions/{id}/export | exports.py | Excel/CSV download |
 | /api/users | users.py | List raters |
 
-## Evaluation Types
+## Evaluation Questions
 
-### Single Question Mode
-Projects can use one evaluation type:
+Projects use the `EvaluationQuestion` table for evaluation configuration. Each question has:
+- `key`: Unique identifier (used in exports)
+- `label`: Display text
+- `question_type`: rating, binary, multi_label, text, multi_criteria, pairwise
+- `config`: Type-specific configuration
+- `required`: Whether answer is mandatory
+- `conditional`: Show only if another question has specific value
 
+### Question Types
 | Type | Description | Config Example |
 |------|-------------|----------------|
-| `rating` | Numeric scale (default) | `{"min": 1, "max": 5, "labels": {"1": "Poor", "5": "Excellent"}}` |
+| `rating` | Numeric scale | `{"min": 1, "max": 5, "labels": {"1": "Poor", "5": "Excellent"}}` |
 | `binary` | Two-choice selection | `{"options": [{"value": "yes", "label": "Yes"}, {"value": "no", "label": "No"}]}` |
 | `multi_label` | Select multiple labels | `{"options": [...], "min_select": 0, "max_select": null}` |
 | `multi_criteria` | Rate on multiple dimensions | `{"criteria": [{"key": "accuracy", "label": "Accuracy", "min": 1, "max": 5}]}` |
 | `pairwise` | A vs B comparison | `{"show_confidence": true, "allow_tie": true}` |
-
-### Multi-Question Mode
-When `use_multi_questions=true`, projects use the `EvaluationQuestion` table instead. Each question has:
-- `key`: Unique identifier (used in exports)
-- `label`: Display text
-- `question_type`: rating, binary, multi_label, text
-- `config`: Type-specific configuration
-- `required`: Whether answer is mandatory
-- `conditional`: Show only if another question has specific value
+| `text` | Free text input | `{"placeholder": "Enter your feedback...", "max_length": 1000}` |
 
 Rating responses stored as: `{"question_key": {"value": ...}, ...}`
 
@@ -131,7 +156,7 @@ Rating responses stored as: `{"question_key": {"value": ...}, ...}`
 | Type | Formats | Display |
 |------|---------|---------|
 | Images | PNG, JPG, GIF, WebP, SVG | Inline with zoom lightbox |
-| Videos | MP4, WebM + YouTube/Vimeo URLs | Embedded player |
+| Videos | MP4, WebM + YouTube/Vimeo URLs | Custom player with frame stepping |
 | Audio | MP3, WAV, OGG | Audio player |
 | PDFs | PDF files | Embedded viewer + download |
 
@@ -147,12 +172,23 @@ Data row content automatically detects:
 - Upload via: `POST /api/projects/{id}/media`
 - Serve via: `GET /api/media/{id}`
 
+## Frontend Tech Stack
+
+- **Vite** - Build tool
+- **React 18** - UI framework
+- **TypeScript** - Type safety
+- **React Router v6** - Client-side routing
+- **TanStack Query** - Server state management
+- **React Context** - Auth and toast state
+- **Tailwind CSS** - Styling
+- **Axios** - HTTP client
+
 ## Development Notes
 
 - No test suite currently exists
-- No linting configuration present
-- Frontend uses Fetch API for all HTTP requests
+- Frontend uses React Query for caching and data synchronization
 - File parsing supports CSV (comma-separated, UTF-8) and Excel (.xlsx, .xls)
-- Export generates multi-rater columns: {username}_rating, {username}_comment, plus average_rating and rating_count
+- Export generates multi-rater columns: {username}_response, {username}_comment
 - Session-based auth with HTTP-only cookies (7-day expiry)
 - Password hashing via bcrypt
+- Video player supports keyboard shortcuts (space, comma, period for frame stepping)
