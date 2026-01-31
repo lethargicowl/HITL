@@ -216,35 +216,48 @@ export function RatingPage() {
   ];
 
   return (
-    <div className={`transition-all ${isExamplesOpen ? 'mr-96' : ''}`}>
+    <div className={`transition-all duration-300 ${isExamplesOpen ? 'mr-96' : ''}`}>
       {/* Header */}
-      <div className="mb-6">
+      <div className="mb-8">
         <button
           onClick={() => navigate(`/projects/${session.project_id}/rate`)}
-          className="text-gray-500 hover:text-gray-700 mb-4 inline-flex items-center"
+          className="text-gray-500 hover:text-primary-600 mb-4 inline-flex items-center group transition-colors"
         >
-          <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg className="w-4 h-4 mr-1.5 group-hover:-translate-x-0.5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
           </svg>
           Back to Sessions
         </button>
 
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-bold text-gray-900">{session.name}</h1>
-            <p className="text-sm text-gray-500">{session.project.name}</p>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white rounded-2xl shadow-soft p-6 border border-gray-100">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary-100 to-accent-100 flex items-center justify-center flex-shrink-0">
+              <svg className="w-6 h-6 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" />
+              </svg>
+            </div>
+            <div>
+              <h1 className="text-xl font-bold text-gray-900">{session.name}</h1>
+              <p className="text-sm text-gray-500">{session.project.name}</p>
+            </div>
           </div>
 
           <div className="flex items-center gap-4">
             <div className="text-right">
-              <div className="text-lg font-semibold">{Math.round(progress)}%</div>
+              <div className="text-2xl font-bold bg-gradient-to-r from-primary-600 to-accent-500 bg-clip-text text-transparent">
+                {Math.round(progress)}%
+              </div>
               <div className="text-xs text-gray-500">{ratedCount} / {session.row_count} rated</div>
             </div>
             <Button
               variant="secondary"
               size="sm"
               onClick={() => setIsExamplesOpen(!isExamplesOpen)}
+              className="hidden sm:flex"
             >
+              <svg className="w-4 h-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
+              </svg>
               Examples
             </Button>
           </div>
@@ -255,7 +268,8 @@ export function RatingPage() {
             value={ratedCount}
             max={session.row_count}
             showPercentage={false}
-            color={progress === 100 ? 'success' : 'primary'}
+            color={progress === 100 ? 'success' : 'gradient'}
+            size="sm"
           />
         </div>
       </div>
@@ -271,20 +285,22 @@ export function RatingPage() {
 
       {/* Instructions Panel */}
       {session.project.instructions && (
-        <Card className="mb-6">
+        <Card className="mb-6 overflow-hidden">
           <CardBody className="p-0">
             <button
               onClick={() => setIsInstructionsOpen(!isInstructionsOpen)}
-              className="w-full flex items-center justify-between p-4 text-left hover:bg-gray-50 transition-colors"
+              className="w-full flex items-center justify-between p-4 text-left hover:bg-gray-50/50 transition-colors"
             >
-              <div className="flex items-center gap-2">
-                <svg className="w-5 h-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-primary-100 flex items-center justify-center">
+                  <svg className="w-4 h-4 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
                 <span className="font-medium text-gray-900">Rating Instructions</span>
               </div>
               <svg
-                className={`w-5 h-5 text-gray-500 transition-transform ${isInstructionsOpen ? 'rotate-180' : ''}`}
+                className={`w-5 h-5 text-gray-400 transition-transform duration-200 ${isInstructionsOpen ? 'rotate-180' : ''}`}
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -293,8 +309,8 @@ export function RatingPage() {
               </svg>
             </button>
             {isInstructionsOpen && (
-              <div className="px-4 pb-4 border-t">
-                <div className="pt-4 prose prose-sm max-w-none text-gray-700 whitespace-pre-wrap">
+              <div className="px-4 pb-4 border-t border-gray-100">
+                <div className="pt-4 prose prose-sm max-w-none text-gray-600 whitespace-pre-wrap leading-relaxed">
                   {session.project.instructions}
                 </div>
               </div>
@@ -479,25 +495,28 @@ export function RatingPage() {
         onClose={() => setShowCompletionModal(false)}
         title="All Done!"
       >
-        <div className="space-y-4 text-center">
-          <div className="mx-auto w-16 h-16 bg-green-100 rounded-full flex items-center justify-center">
-            <svg className="w-8 h-8 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-            </svg>
+        <div className="space-y-6 text-center py-4">
+          <div className="relative mx-auto w-20 h-20">
+            <div className="absolute inset-0 bg-success-500/20 rounded-full blur-xl" />
+            <div className="relative w-20 h-20 bg-gradient-to-br from-success-400 to-success-600 rounded-full flex items-center justify-center shadow-lg">
+              <svg className="w-10 h-10 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
           </div>
           <div>
-            <h3 className="text-lg font-semibold text-gray-900">
+            <h3 className="text-xl font-bold text-gray-900">
               Congratulations!
             </h3>
-            <p className="text-gray-600 mt-1">
-              You have rated all {session?.row_count} items in this session.
+            <p className="text-gray-500 mt-2">
+              You have rated all <span className="font-semibold text-gray-700">{session?.row_count}</span> items in this session.
             </p>
           </div>
           <div className="flex justify-center gap-3 pt-2">
             <Button variant="secondary" onClick={() => setShowCompletionModal(false)}>
               Review Ratings
             </Button>
-            <Button onClick={() => navigate(`/projects/${session?.project_id}/rate`)}>
+            <Button variant="gradient" onClick={() => navigate(`/projects/${session?.project_id}/rate`)}>
               Back to Sessions
             </Button>
           </div>
