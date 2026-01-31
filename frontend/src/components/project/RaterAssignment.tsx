@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Modal, Button, Badge } from '@/components/common';
+import { Modal, Button, Badge, ConfirmDialog } from '@/components/common';
 import { UserBasic } from '@/types';
 
 interface RaterAssignmentProps {
@@ -23,6 +23,8 @@ export function RaterAssignment({
 }: RaterAssignmentProps) {
   const [selectedRaters, setSelectedRaters] = useState<Set<string>>(new Set());
   const [isAssigning, setIsAssigning] = useState(false);
+  const [removeRaterId, setRemoveRaterId] = useState<string | null>(null);
+  const [isRemoving, setIsRemoving] = useState(false);
 
   const assignedIds = new Set(assignedRaters.map((r) => r.id));
   const unassignedRaters = availableRaters.filter((r) => !assignedIds.has(r.id));
@@ -49,9 +51,14 @@ export function RaterAssignment({
     }
   };
 
-  const handleRemove = async (raterId: string) => {
-    if (window.confirm('Are you sure you want to remove this rater from the project?')) {
-      await onRemove(raterId);
+  const handleRemove = async () => {
+    if (!removeRaterId) return;
+    setIsRemoving(true);
+    try {
+      await onRemove(removeRaterId);
+      setRemoveRaterId(null);
+    } finally {
+      setIsRemoving(false);
     }
   };
 
@@ -81,9 +88,9 @@ export function RaterAssignment({
                 <Badge key={rater.id} variant="primary" size="md" className="pr-1">
                   {rater.username}
                   <button
-                    onClick={() => handleRemove(rater.id)}
+                    onClick={() => setRemoveRaterId(rater.id)}
                     className="ml-2 hover:bg-primary-200 rounded-full p-0.5"
-                    disabled={isLoading}
+                    disabled={isLoading || isRemoving}
                   >
                     <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
                       <path
@@ -139,6 +146,17 @@ export function RaterAssignment({
           )}
         </div>
       </div>
+
+      <ConfirmDialog
+        isOpen={removeRaterId !== null}
+        onClose={() => setRemoveRaterId(null)}
+        onConfirm={handleRemove}
+        title="Remove Rater"
+        message="Are you sure you want to remove this rater from the project? They will no longer be able to rate items in this project."
+        confirmLabel="Remove"
+        variant="danger"
+        isLoading={isRemoving}
+      />
     </Modal>
   );
 }

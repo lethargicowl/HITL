@@ -243,23 +243,48 @@ HITL/
 - [x] .dockerignore for smaller images
 - [x] Updated .gitignore
 
-### Phase 2: Audio Enhancement (MM.2)
+### Phase 2: UI/UX Polish (HIGH PRIORITY COMPLETE)
+Priority fixes identified from UI/UX survey:
+
+**High Priority:**
+- [x] Update ProjectSessionsPage with new design system (gradient header, card styling)
+- [x] Create ConfirmDialog component to replace window.confirm()
+- [x] Add skeleton loaders for better perceived performance (Skeleton, SkeletonCard, SkeletonProjectCard, SkeletonSessionCard, SkeletonTable, SkeletonDashboardHeader)
+- [x] Replace window.confirm() with ConfirmDialog in all components:
+  - QuestionList, SessionList, RaterAssignment, ExampleList, ProjectDetailPage
+- [x] Update FileUpload modal with new design patterns (gradient icons, file card, format badges)
+
+**Medium Priority:**
+- [ ] Add search/filter to project lists
+- [ ] Create proper Dropdown component for QuestionList templates
+- [ ] Improve RaterAssignment modal styling
+- [ ] Add search to rater assignment list
+- [ ] Better empty states with illustrations
+
+**Nice to Have:**
+- [ ] Dark mode support
+- [ ] New user onboarding/welcome flow
+- [ ] Keyboard shortcuts help modal (? key)
+- [ ] Bulk actions for datasets
+- [ ] "Recently visited" projects
+
+### Phase 3: Audio Enhancement (MM.2)
 - Waveform display using wavesurfer.js
 - Keyboard shortcuts (space, arrows)
 - Playback speed control
 - Click-to-seek on waveform
 
-### Phase 3: A/B Media Comparison (MM.5)
+### Phase 4: A/B Media Comparison (MM.5)
 - Synchronized playback for pairwise video/audio
 - Shared timeline controls
 - Critical for RLHF video/audio evaluation
 
-### Phase 4: Quality Control
+### Phase 5: Quality Control
 - **Gold Questions**: Known-answer honeypots for quality validation
 - **Inter-Rater Agreement**: Kappa, ICC, Krippendorff's alpha metrics
 - **Rater Performance Dashboard**: Track accuracy, speed, consistency
 
-### Phase 5: Security Hardening
+### Phase 6: Security Hardening
 - Rate limiting
 - Audit logging
 - Input validation hardening

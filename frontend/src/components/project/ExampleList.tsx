@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Button, Badge, Card, CardBody, EmptyState } from '@/components/common';
+import { Button, Badge, Card, CardBody, EmptyState, ConfirmDialog } from '@/components/common';
 import { ExampleForm } from './ExampleForm';
 import { AnnotationExample, AnnotationExampleCreate, AnnotationExampleUpdate } from '@/types';
 
@@ -19,6 +19,8 @@ export function ExampleList({
 }: ExampleListProps) {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingExample, setEditingExample] = useState<AnnotationExample | undefined>();
+  const [deleteExampleId, setDeleteExampleId] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const sortedExamples = [...examples].sort((a, b) => a.order - b.order);
 
@@ -32,9 +34,14 @@ export function ExampleList({
     }
   };
 
-  const handleDeleteExample = async (exampleId: string) => {
-    if (window.confirm('Are you sure you want to delete this example?')) {
-      await onDelete(exampleId);
+  const handleDeleteExample = async () => {
+    if (!deleteExampleId) return;
+    setIsDeleting(true);
+    try {
+      await onDelete(deleteExampleId);
+      setDeleteExampleId(null);
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -92,7 +99,7 @@ export function ExampleList({
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => handleDeleteExample(example.id)}
+                      onClick={() => setDeleteExampleId(example.id)}
                     >
                       Delete
                     </Button>
@@ -113,6 +120,17 @@ export function ExampleList({
         onClose={closeForm}
         onSubmit={editingExample ? handleUpdateExample : handleAddExample}
         existingExample={editingExample}
+      />
+
+      <ConfirmDialog
+        isOpen={deleteExampleId !== null}
+        onClose={() => setDeleteExampleId(null)}
+        onConfirm={handleDeleteExample}
+        title="Delete Example"
+        message="Are you sure you want to delete this example? This action cannot be undone."
+        confirmLabel="Delete"
+        variant="danger"
+        isLoading={isDeleting}
       />
     </div>
   );

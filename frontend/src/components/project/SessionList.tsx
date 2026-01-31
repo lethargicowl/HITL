@@ -1,5 +1,6 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Card, CardBody, Button, Badge, ProgressBar, EmptyState } from '@/components/common';
+import { Card, CardBody, Button, Badge, ProgressBar, EmptyState, ConfirmDialog } from '@/components/common';
 import { SessionListItem } from '@/types';
 
 interface SessionListProps {
@@ -12,6 +13,7 @@ interface SessionListProps {
 
 export function SessionList({ sessions, isRequester = false, onDelete, onExport, onPreview }: SessionListProps) {
   const navigate = useNavigate();
+  const [deleteSessionId, setDeleteSessionId] = useState<string | null>(null);
 
   if (sessions.length === 0) {
     return (
@@ -33,9 +35,10 @@ export function SessionList({ sessions, isRequester = false, onDelete, onExport,
     navigate(`/sessions/${sessionId}/rate`);
   };
 
-  const handleDelete = (sessionId: string) => {
-    if (window.confirm('Are you sure you want to delete this dataset? This action cannot be undone.')) {
-      onDelete?.(sessionId);
+  const handleDelete = () => {
+    if (deleteSessionId) {
+      onDelete?.(deleteSessionId);
+      setDeleteSessionId(null);
     }
   };
 
@@ -129,7 +132,7 @@ export function SessionList({ sessions, isRequester = false, onDelete, onExport,
                       <Button
                         size="sm"
                         variant="danger"
-                        onClick={() => handleDelete(session.id)}
+                        onClick={() => setDeleteSessionId(session.id)}
                       >
                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
@@ -143,6 +146,16 @@ export function SessionList({ sessions, isRequester = false, onDelete, onExport,
           </Card>
         );
       })}
+
+      <ConfirmDialog
+        isOpen={deleteSessionId !== null}
+        onClose={() => setDeleteSessionId(null)}
+        onConfirm={handleDelete}
+        title="Delete Dataset"
+        message="Are you sure you want to delete this dataset? This action cannot be undone."
+        confirmLabel="Delete"
+        variant="danger"
+      />
     </div>
   );
 }

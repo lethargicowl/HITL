@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Button, Badge, Card, CardBody, EmptyState } from '@/components/common';
+import { Button, Badge, Card, CardBody, EmptyState, ConfirmDialog } from '@/components/common';
 import { QuestionForm } from './QuestionForm';
 import { EvaluationQuestion, EvaluationQuestionCreate, EvaluationQuestionUpdate } from '@/types';
 
@@ -37,6 +37,8 @@ export function QuestionList({
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingQuestion, setEditingQuestion] = useState<EvaluationQuestion | undefined>();
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const [deleteQuestionId, setDeleteQuestionId] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const sortedQuestions = [...questions].sort((a, b) => a.order - b.order);
 
@@ -50,9 +52,14 @@ export function QuestionList({
     }
   };
 
-  const handleDeleteQuestion = async (questionId: string) => {
-    if (window.confirm('Are you sure you want to delete this question?')) {
-      await onDelete(questionId);
+  const handleDeleteQuestion = async () => {
+    if (!deleteQuestionId) return;
+    setIsDeleting(true);
+    try {
+      await onDelete(deleteQuestionId);
+      setDeleteQuestionId(null);
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -188,7 +195,7 @@ export function QuestionList({
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => handleDeleteQuestion(question.id)}
+                      onClick={() => setDeleteQuestionId(question.id)}
                     >
                       Delete
                     </Button>
@@ -206,6 +213,17 @@ export function QuestionList({
         onSubmit={editingQuestion ? handleUpdateQuestion : handleAddQuestion}
         existingQuestion={editingQuestion}
         existingQuestions={sortedQuestions}
+      />
+
+      <ConfirmDialog
+        isOpen={deleteQuestionId !== null}
+        onClose={() => setDeleteQuestionId(null)}
+        onConfirm={handleDeleteQuestion}
+        title="Delete Question"
+        message="Are you sure you want to delete this question? This action cannot be undone."
+        confirmLabel="Delete"
+        variant="danger"
+        isLoading={isDeleting}
       />
     </div>
   );
