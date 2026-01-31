@@ -2,8 +2,7 @@ import bcrypt
 import secrets
 from datetime import datetime, timedelta
 
-# Session expires after 7 days
-SESSION_EXPIRE_DAYS = 7
+from ..config import settings
 
 
 def hash_password(password: str) -> str:
@@ -27,4 +26,4 @@ def create_session_token() -> str:
 
 def get_session_expiry() -> datetime:
     """Get the expiry time for a new session."""
-    return datetime.utcnow() + timedelta(days=SESSION_EXPIRE_DAYS)
+    return datetime.utcnow() + timedelta(days=settings.SESSION_EXPIRE_DAYS)

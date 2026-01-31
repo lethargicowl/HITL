@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 
 from ..database import get_db
+from ..config import settings
 from ..models import User, UserSession, UserCreate, UserLogin, UserResponse
 from ..services.auth_service import (
     hash_password, verify_password, create_session_token, get_session_expiry
@@ -68,13 +69,14 @@ async def login(
     db.add(user_session)
     db.commit()
 
-    # Set cookie
+    # Set cookie with production-safe settings
     response.set_cookie(
         key="session_id",
         value=session_token,
         httponly=True,
-        max_age=60 * 60 * 24 * 7,  # 7 days
-        samesite="lax"
+        secure=settings.COOKIE_SECURE,  # True in production (HTTPS)
+        samesite=settings.COOKIE_SAMESITE,
+        max_age=60 * 60 * 24 * settings.SESSION_EXPIRE_DAYS,
     )
 
     return {

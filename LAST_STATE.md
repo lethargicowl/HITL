@@ -209,7 +209,7 @@ HITL/
 - **Custom evaluation interfaces** - flexible question configuration
 - **Small-to-medium scale** - < 10 raters, < 100K items
 
-### Current Status: ~75% MVP Complete
+### Current Status: ~80% MVP Complete (Production Ready)
 
 | Category | Status |
 |----------|--------|
@@ -222,40 +222,53 @@ HITL/
 | Multi-question | ✅ Complete |
 | React frontend | ✅ Complete |
 | UI/UX Design System | ✅ Complete |
+| Production Config | ✅ Complete |
+| Docker Deployment | ✅ Complete |
 | Quality control (gold questions) | ❌ Missing |
 | Agreement metrics | ❌ Missing |
-| Security hardening | ❌ Missing |
 
 ---
 
 ## Next Priority Tasks
 
-### Phase 1: Audio Enhancement (MM.2)
+### Phase 1: Production Readiness (COMPLETE)
+- [x] Environment configuration (.env support via python-dotenv)
+- [x] Secure cookie settings (secure flag for HTTPS configurable)
+- [x] Environment-based CORS configuration
+- [x] Health check endpoint (/health and /api/health)
+- [x] Dockerfile for deployment (multi-stage build)
+- [x] docker-compose.yml for easy deployment
+- [x] Clean up requirements.txt (removed jinja2, added versions)
+- [x] .env.example with all configuration options
+- [x] .dockerignore for smaller images
+- [x] Updated .gitignore
+
+### Phase 2: Audio Enhancement (MM.2)
 - Waveform display using wavesurfer.js
 - Keyboard shortcuts (space, arrows)
 - Playback speed control
 - Click-to-seek on waveform
 
-### Phase 2: A/B Media Comparison (MM.5)
+### Phase 3: A/B Media Comparison (MM.5)
 - Synchronized playback for pairwise video/audio
 - Shared timeline controls
 - Critical for RLHF video/audio evaluation
 
-### Phase 3: Quality Control (Critical)
+### Phase 4: Quality Control
 - **Gold Questions**: Known-answer honeypots for quality validation
 - **Inter-Rater Agreement**: Kappa, ICC, Krippendorff's alpha metrics
 - **Rater Performance Dashboard**: Track accuracy, speed, consistency
 
-### Phase 4: Security Hardening
-- CSRF protection
+### Phase 5: Security Hardening
 - Rate limiting
 - Audit logging
+- Input validation hardening
 
 ---
 
 ## Quick Reference
 
-### Running the App
+### Running the App (Development)
 ```bash
 # Install backend dependencies
 pip install -r requirements.txt
@@ -273,13 +286,40 @@ python3 -m uvicorn app.main:app --reload --port 8000
 cd frontend && npm run dev
 ```
 
+### Running with Docker (Production)
+```bash
+# Copy and configure environment
+cp .env.example .env
+# Edit .env - set SECRET_KEY, COOKIE_SECURE=true for HTTPS, etc.
+
+# Build and run
+docker-compose up -d
+
+# View logs
+docker-compose logs -f
+
+# Stop
+docker-compose down
+```
+
+### Configuration (.env)
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `SECRET_KEY` | change-me | Session signing key |
+| `DEBUG` | false | Enable debug mode |
+| `COOKIE_SECURE` | false | Set true for HTTPS |
+| `CORS_ORIGINS` | localhost | Comma-separated origins |
+| `DATABASE_URL` | sqlite | Database connection string |
+| `SESSION_EXPIRE_DAYS` | 7 | Session lifetime |
+
 ### Database
 - Location: `data/hitl.db`
 - Reset: `rm data/hitl.db` then restart server
 
 ### Access Points
 - Application: http://localhost:8000
-- API Docs: http://localhost:8000/docs
+- Health Check: http://localhost:8000/health
+- API Docs: http://localhost:8000/docs (debug mode only)
 - Frontend Dev: http://localhost:3000 (when using npm run dev)
 
 ### Test Data Files

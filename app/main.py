@@ -1,19 +1,25 @@
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 import os
 
+from .config import settings
 from .database import init_db
 from .routers import uploads, ratings, exports, auth, projects, users, questions, media, examples
 
 # Initialize FastAPI app
-app = FastAPI(title="HITL Rating Platform", version="2.0.0")
+app = FastAPI(
+    title=settings.APP_NAME,
+    version=settings.APP_VERSION,
+    docs_url="/docs" if settings.DEBUG else None,
+    redoc_url="/redoc" if settings.DEBUG else None,
+)
 
-# Add CORS middleware for development
+# Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=settings.CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -48,6 +54,30 @@ app.include_router(examples.router)
 def startup():
     """Initialize database on startup."""
     init_db()
+
+
+# ==================== Health Check ====================
+
+@app.get("/health", tags=["health"])
+async def health_check():
+    """Health check endpoint for monitoring and load balancers."""
+    return JSONResponse(
+        content={
+            "status": "healthy",
+            "version": settings.APP_VERSION,
+        }
+    )
+
+
+@app.get("/api/health", tags=["health"])
+async def api_health_check():
+    """API health check endpoint."""
+    return JSONResponse(
+        content={
+            "status": "healthy",
+            "version": settings.APP_VERSION,
+        }
+    )
 
 
 # Helper function to serve React SPA

@@ -183,12 +183,42 @@ Data row content automatically detects:
 - **Tailwind CSS** - Styling
 - **Axios** - HTTP client
 
+## Production Deployment
+
+### Using Docker (Recommended)
+```bash
+# Build and run with docker-compose
+docker-compose up -d
+
+# Or build manually
+docker build -t hitl .
+docker run -p 8000:8000 -v hitl-data:/app/data hitl
+```
+
+### Configuration
+Copy `.env.example` to `.env` and configure:
+```bash
+cp .env.example .env
+# Edit .env with your settings
+```
+
+Key production settings:
+- `SECRET_KEY`: Set a strong random string
+- `COOKIE_SECURE=true`: Enable for HTTPS
+- `DEBUG=false`: Disable in production
+- `CORS_ORIGINS`: Set to your domain(s)
+
+### Health Check
+- `/health` - Basic health check
+- `/api/health` - API health check
+
 ## Development Notes
 
 - No test suite currently exists
 - Frontend uses React Query for caching and data synchronization
 - File parsing supports CSV (comma-separated, UTF-8) and Excel (.xlsx, .xls)
 - Export generates multi-rater columns: {username}_response, {username}_comment
-- Session-based auth with HTTP-only cookies (7-day expiry)
+- Session-based auth with HTTP-only cookies (configurable expiry)
 - Password hashing via bcrypt
 - Video player supports keyboard shortcuts (space, comma, period for frame stepping)
+- Environment configuration via `.env` file (python-dotenv)

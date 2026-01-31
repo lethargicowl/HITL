@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  hitl:
+    build: .
+    ports:
+      - "${PORT:-8000}:8000"
+    environment:
+      - APP_NAME=${APP_NAME:-HITL Rating Platform}
+      - DEBUG=${DEBUG:-false}
+      - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
+      - SESSION_EXPIRE_DAYS=${SESSION_EXPIRE_DAYS:-7}
+      - COOKIE_SECURE=${COOKIE_SECURE:-false}
+      - COOKIE_SAMESITE=${COOKIE_SAMESITE:-lax}
+      - CORS_ORIGINS=${CORS_ORIGINS:-}
+      - DATABASE_URL=${DATABASE_URL:-}
+    volumes:
+      # Persist data directory
+      - hitl-data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  hitl-data:
+    driver: local

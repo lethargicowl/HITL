@@ -11,19 +11,20 @@ from pathlib import Path
 from typing import Optional, Tuple, BinaryIO
 from fastapi import UploadFile
 
+from ..config import settings
 from ..models import SUPPORTED_MEDIA_TYPES
 
 
 class MediaStorageService:
     """Handles media file storage operations."""
 
-    def __init__(self, base_path: str = "data/media"):
+    def __init__(self, base_path: Optional[str] = None):
         """Initialize the storage service.
 
         Args:
-            base_path: Base directory for storing media files
+            base_path: Base directory for storing media files (defaults to config)
         """
-        self.base_path = Path(base_path)
+        self.base_path = Path(base_path) if base_path else Path(settings.get_media_dir())
         self.base_path.mkdir(parents=True, exist_ok=True)
 
     def get_project_path(self, project_id: str) -> Path:

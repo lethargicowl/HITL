@@ -87,6 +87,25 @@ Thumbs.db
 # =====================
 # Environment / Secrets
 # =====================
+.env
 .env.*
+!.env.example
 *.pem
 *.key
+
+# =====================
+# Data Directory
+# =====================
+data/
+!data/.gitkeep
+
+# =====================
+# Frontend Build
+# =====================
+frontend/node_modules/
+frontend/dist/
+
+# =====================
+# Uploads
+# =====================
+uploads/
